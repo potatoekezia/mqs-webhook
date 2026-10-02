@@ -1,0 +1,168 @@
+{
+  "entities": {
+    "DictionaryEntry": {
+      "title": "Dictionary Entry",
+      "description": "A mapping between a target monster icon and its reference image for matching.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Unique ID for the entry."
+        },
+        "name": {
+          "type": "string",
+          "description": "Optional name of the monster."
+        },
+        "targetImage": {
+          "type": "string",
+          "description": "Base64 encoded target image (reference icon)."
+        },
+        "targetHash": {
+          "type": "string",
+          "description": "pHash of the target image."
+        },
+        "targetPosition": {
+          "type": "object",
+          "description": "Original crop coordinates."
+        },
+        "timestamp": {
+          "type": "number",
+          "description": "Creation timestamp."
+        }
+      },
+      "required": ["id", "targetImage", "targetHash", "timestamp"]
+    },
+    "GeminiKeys": {
+      "title": "Gemini API Keys",
+      "description": "A pool of Gemini API keys for rotation.",
+      "type": "object",
+      "properties": {
+        "keys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of API keys."
+        }
+      },
+      "required": ["keys"]
+    },
+    "AppSettings": {
+      "title": "App Settings",
+      "description": "Shared configuration for the application.",
+      "type": "object",
+      "properties": {
+        "circleConfig": {
+          "type": "object",
+          "description": "JSON string of circle positions."
+        },
+        "threshold": {
+          "type": "number",
+          "description": "Confidence threshold percentage."
+        },
+        "autoSaveSS": {
+          "type": "boolean",
+          "description": "Whether to auto-save screenshots."
+        },
+        "debugPanelEnabled": {
+          "type": "boolean",
+          "description": "Whether the debug panel is visible."
+        }
+      }
+    },
+    "Screenshot": {
+      "title": "Saved Screenshot",
+      "description": "A screenshot saved from the solver.",
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "string",
+          "description": "Base64 encoded screenshot image."
+        },
+        "timestamp": {
+          "type": "number",
+          "description": "Creation timestamp."
+        }
+      },
+      "required": ["data", "timestamp"]
+    },
+    "ScreenshotAudit": {
+      "title": "Screenshot Audit Log",
+      "description": "Metadata of previously processed screenshots to prevent duplicate entries (no raw images stored).",
+      "type": "object",
+      "properties": {
+        "records": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          },
+          "description": "List of screenshot audit metadata records (id, fileName, monsterName, timestamp, size)."
+        }
+      }
+    },
+    "IgnoredDuplicates": {
+      "title": "Ignored Duplicates",
+      "description": "List of false-positive variant pair keys that the user chose to ignore from duplicate audits.",
+      "type": "object",
+      "properties": {
+        "keys": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "List of ignored pair keys."
+        }
+      }
+    },
+    "SolverHistory": {
+      "title": "Solver History",
+      "description": "Log of solved quiz results across users (lightweight text numbers only).",
+      "type": "object",
+      "properties": {
+        "user": {
+          "type": "string",
+          "description": "Name of the user who ran the solver."
+        },
+        "result": {
+          "type": "string",
+          "description": "3-digit solver result numbers (e.g. 421)."
+        },
+        "timestamp": {
+          "type": "number",
+          "description": "Creation timestamp in milliseconds."
+        }
+      },
+      "required": ["user", "result", "timestamp"]
+    }
+  },
+  "firestore": {
+    "/dictionary": {
+      "schema": "DictionaryEntry",
+      "description": "Collection of monster quiz dictionary entries."
+    },
+    "/config/geminiKeys": {
+      "schema": "GeminiKeys",
+      "description": "Central configuration for Gemini API keys."
+    },
+    "/config/appSettings": {
+      "schema": "AppSettings",
+      "description": "Shared application settings."
+    },
+    "/config/screenshotAudit": {
+      "schema": "ScreenshotAudit",
+      "description": "Central configuration for screenshot audit metadata."
+    },
+    "/config/ignoredDuplicates": {
+      "schema": "IgnoredDuplicates",
+      "description": "Central configuration for user-ignored duplicate variant pairs."
+    },
+    "/screenshots": {
+      "schema": "Screenshot",
+      "description": "Shared collection of saved screenshots."
+    },
+    "/solver_history": {
+      "schema": "SolverHistory",
+      "description": "Shared log of solved quiz answers."
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "Monster Quiz Solver",
+  "description": "A mobile-friendly tool to solve monster quizzes using image matching and Gemini AI.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

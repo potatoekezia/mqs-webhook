@@ -1,0 +1,78 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: dictionary
+    // Document ID: auto-generated
+    // Fields:
+    //   - name: string (optional)
+    //   - targetImage: string (required, base64)
+    //   - targetHash: string (required, 63-bit)
+    //   - targetPosition: map (optional)
+    //   - timestamp: number (required)
+    //
+    // ===============================================================
+
+    // Helper Functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isValidEntry(data) {
+      return data.keys().hasAll(['targetImage', 'targetHash', 'timestamp']) &&
+             data.targetImage is string && data.targetImage.size() < 1000000 &&
+             data.targetHash is string && data.targetHash.size() == 63 &&
+             data.timestamp is number;
+    }
+
+    match /dictionary/{entryId} {
+      // Allow anyone authenticated to read and write to the dictionary
+      // This is a shared dictionary for all 50 devices as requested.
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidEntry(request.resource.data);
+      allow update: if isAuthenticated() && isValidEntry(request.resource.data);
+      allow delete: if isAuthenticated();
+    }
+
+    match /config/geminiKeys {
+      // Allow authenticated users to read and write the key pool
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    match /config/appSettings {
+      // Allow authenticated users to read and write shared settings
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    match /config/screenshotAudit {
+      // Allow authenticated users to read and write screenshot audit metadata
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    match /config/ignoredDuplicates {
+      // Allow authenticated users to read and write ignored duplicate keys
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    match /screenshots/{screenshotId} {
+      // Allow authenticated users to read and write shared screenshots
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+
+    match /solver_history/{historyId} {
+      // Allow authenticated users to read, create, and clear solver history logs
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow delete: if isAuthenticated();
+    }
+  }
+}
