@@ -9,7 +9,8 @@
     "start": "tsx server.ts",
     "preview": "vite preview",
     "clean": "rm -rf dist",
-    "lint": "echo 'No linting needed'"
+    "lint": "echo 'No linting needed'",
+    "test:load": "node scripts/load-test.cjs"
   },
   "dependencies": {
     "@google/genai": "^1.29.0",

@@ -1746,7 +1746,9 @@
                     pushHistoryToServer();
                 }
                 fetchSharedHistoryFromServer();
-                setInterval(fetchSharedHistoryFromServer, 4000);
+                setInterval(() => {
+                    if (!db) fetchSharedHistoryFromServer();
+                }, 20000);
                 window.addEventListener('focus', fetchSharedHistoryFromServer);
                 setTimeout(() => deduplicateDictionary(), 2000);
             } catch (err) {
@@ -2695,6 +2697,7 @@
         }
 
         async function fetchSharedHistoryFromServer() {
+            if (db) return; // Managed by Firestore real-time listener without consuming Vercel serverless calls
             try {
                 const res = await fetch('/api/history');
                 if (res.ok) {

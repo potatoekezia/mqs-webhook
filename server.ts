@@ -212,6 +212,11 @@ async function startServer() {
     }
   });
 
+  // Loader.io verification endpoint
+  app.get('/loaderio-a4d07eb0b080983ea5999ef8b78d57fd*', (_req, res) => {
+    res.type('text/plain').send('loaderio-a4d07eb0b080983ea5999ef8b78d57fd');
+  });
+
   // Serve static files or Vite middlewares
   if (process.env.NODE_ENV === 'production') {
     app.use(express.static(path.resolve(__dirname, 'dist')));
