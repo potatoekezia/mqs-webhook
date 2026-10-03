@@ -9,10 +9,10 @@
     <meta property="og:description" content="A mobile-friendly tool to solve monster quizzes using image matching and Gemini AI.">
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>👾</text></svg>">
     <!-- Firebase SDKs -->
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
+    <script crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+    <script crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+    <script crossorigin="anonymous" src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
     <style>
         :root {
             --bg-dark: #121212;
@@ -1197,7 +1197,7 @@
             </div>
 
             <div style="margin-top:16px; margin-bottom:16px">
-                <label style="display:block; margin-bottom:6px; font-weight:500; font-size:13px">Auto Refresh Solver After Quiz Solved:</label>
+                <label style="display:block; margin-bottom:6px; font-weight:500; font-size:13px">Auto Refresh Solver (Picked Images & Solved Quizzes):</label>
                 <div style="display:flex; align-items:center; gap:8px">
                     <input type="number" id="settings-auto-refresh-time" min="0" max="1800" step="any" placeholder="e.g. 5 (0 to disable)" style="margin-bottom:0; flex:1">
                     <select id="settings-auto-refresh-unit" style="margin-bottom:0; width:auto; padding:8px 12px; background:var(--surface); color:var(--text); border:1px solid var(--border); border-radius:6px; font-size:13px">
@@ -1205,7 +1205,7 @@
                         <option value="seconds">Seconds</option>
                     </select>
                 </div>
-                <p style="font-size:11px; color:var(--text-secondary); margin-top:4px">After a quiz is analyzed, automatically clears and resets the solver after this delay (e.g. 5 minutes) so the next quiz can be taken in without manually clicking Refresh. (0 to disable)</p>
+                <p style="font-size:11px; color:var(--text-secondary); margin-top:4px">Automatically clears and resets the solver after this delay (e.g. 5 minutes) when an image is picked or a quiz is solved, so images don't get stuck in there. (0 to disable)</p>
             </div>
 
             <div style="margin-top:16px; margin-bottom:16px">
@@ -1598,6 +1598,15 @@
     </div>
 
     <script>
+        // Global error logging and unhandled rejection prevention
+        window.addEventListener('error', function(event) {
+            console.warn('[Application Error Captured]', event.message || event, event.filename, event.lineno);
+        });
+        window.addEventListener('unhandledrejection', function(event) {
+            console.warn('[Unhandled Rejection Captured]', event.reason);
+            event.preventDefault();
+        });
+
         // --- State ---
         let activeTab = 'solver';
         let dictionary = [];
@@ -1661,73 +1670,95 @@
                 { x: 1420, y: 550, radius: 48 }
             ]
         };
-        let circleConfig = JSON.parse(localStorage.getItem('circlePositions')) || DEFAULT_CIRCLE_CONFIG;
-
-        window.onload = () => {
-            if (circleConfig.markers) {
-                const newConfig = JSON.parse(JSON.stringify(DEFAULT_CIRCLE_CONFIG));
-                circleConfig.markers.forEach(m => {
-                    if (m.id.startsWith('T')) {
-                        const idx = parseInt(m.id[1]) - 1;
-                        if (newConfig.targets[idx]) {
-                            newConfig.targets[idx].x = m.x;
-                            newConfig.targets[idx].y = m.y;
-                            newConfig.targets[idx].radius = circleConfig.targetRadius || 48;
-                        }
-                    } else {
-                        const idx = parseInt(m.id[1]) - 1;
-                        if (newConfig.answers[idx]) {
-                            newConfig.answers[idx].x = m.x;
-                            newConfig.answers[idx].y = m.y;
-                            newConfig.answers[idx].radius = circleConfig.answerRadius || 48;
-                        }
-                    }
-                });
-                circleConfig = newConfig;
-                localStorage.setItem('circlePositions', JSON.stringify(circleConfig));
+        let circleConfig = DEFAULT_CIRCLE_CONFIG;
+        try {
+            const savedCirclePos = localStorage.getItem('circlePositions');
+            if (savedCirclePos && savedCirclePos !== 'undefined' && savedCirclePos !== 'null') {
+                const parsed = JSON.parse(savedCirclePos);
+                if (parsed && typeof parsed === 'object') {
+                    circleConfig = parsed;
+                }
             }
+        } catch (e) {
+            circleConfig = DEFAULT_CIRCLE_CONFIG;
+        }
 
+        function startApp() {
             try {
-                const cached = localStorage.getItem('dictionary_cache');
-                if (cached) {
-                    const data = JSON.parse(cached);
-                    if (data && data.version === 1 && Array.isArray(data.entries)) {
-                        dictionary = data.entries;
-                    } else if (Array.isArray(data)) {
-                        dictionary = data;
+                if (circleConfig && Array.isArray(circleConfig.markers)) {
+                    const newConfig = JSON.parse(JSON.stringify(DEFAULT_CIRCLE_CONFIG));
+                    circleConfig.markers.forEach(m => {
+                        if (m && m.id && m.id.startsWith('T')) {
+                            const idx = parseInt(m.id[1]) - 1;
+                            if (newConfig.targets && newConfig.targets[idx]) {
+                                newConfig.targets[idx].x = m.x;
+                                newConfig.targets[idx].y = m.y;
+                                newConfig.targets[idx].radius = circleConfig.targetRadius || 48;
+                            }
+                        } else if (m && m.id) {
+                            const idx = parseInt(m.id[1]) - 1;
+                            if (newConfig.answers && newConfig.answers[idx]) {
+                                newConfig.answers[idx].x = m.x;
+                                newConfig.answers[idx].y = m.y;
+                                newConfig.answers[idx].radius = circleConfig.answerRadius || 48;
+                            }
+                        }
+                    });
+                    circleConfig = newConfig;
+                    try { localStorage.setItem('circlePositions', JSON.stringify(circleConfig)); } catch (e) {}
+                }
+
+                try {
+                    const cached = localStorage.getItem('dictionary_cache');
+                    if (cached) {
+                        const data = JSON.parse(cached);
+                        if (data && data.version === 1 && Array.isArray(data.entries)) {
+                            dictionary = data.entries;
+                        } else if (Array.isArray(data)) {
+                            dictionary = data;
+                        } else {
+                            dictionary = [];
+                        }
                     } else {
                         dictionary = [];
                     }
-                } else {
+                    const cachedScreenshots = localStorage.getItem('screenshots_local');
+                    if (cachedScreenshots) screenshots = JSON.parse(cachedScreenshots);
+                } catch (e) {
+                    console.error("Failed to parse local cache", e);
                     dictionary = [];
                 }
-                const cachedScreenshots = localStorage.getItem('screenshots_local');
-                if (cachedScreenshots) screenshots = JSON.parse(cachedScreenshots);
-            } catch (e) {
-                console.error("Failed to parse local cache", e);
-                dictionary = [];
+
+                loadSettings();
+                initFirebase();
+                renderDictionary();
+                renderStorage();
+                setupEventListeners();
+                renderPreviewCircles();
+                if (solverHistory.length >= 50) {
+                    solverHistory = [];
+                }
+                renderSolverHistory();
+                startHistoryResetTicker();
+                updateSolverUserNameDisplay();
+                // Sync history across instances on startup
+                if (solverHistory.length > 0) {
+                    pushHistoryToServer();
+                }
+                fetchSharedHistoryFromServer();
+                setInterval(fetchSharedHistoryFromServer, 4000);
+                window.addEventListener('focus', fetchSharedHistoryFromServer);
+                setTimeout(() => deduplicateDictionary(), 2000);
+            } catch (err) {
+                console.error("Error during application initialization:", err);
             }
-            loadSettings();
-            initFirebase();
-            renderDictionary();
-            renderStorage();
-            setupEventListeners();
-            renderPreviewCircles();
-            if (solverHistory.length >= 50) {
-                solverHistory = [];
-            }
-            renderSolverHistory();
-            startHistoryResetTicker();
-            updateSolverUserNameDisplay();
-            // Sync history across instances on startup
-            if (solverHistory.length > 0) {
-                pushHistoryToServer();
-            }
-            fetchSharedHistoryFromServer();
-            setInterval(fetchSharedHistoryFromServer, 4000);
-            window.addEventListener('focus', fetchSharedHistoryFromServer);
-            setTimeout(() => deduplicateDictionary(), 2000);
-        };
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', startApp);
+        } else {
+            startApp();
+        }
 
         function setupEventListeners() {
             const tSlider = document.getElementById('threshold-slider');
@@ -1735,26 +1766,31 @@
             const tVal = document.getElementById('threshold-val');
             const sVal = document.getElementById('settings-threshold-val');
 
-            tSlider.oninput = (e) => {
-                sSlider.value = e.target.value;
-                tVal.innerText = e.target.value;
-                sVal.innerText = e.target.value;
-                localStorage.setItem('threshold', e.target.value);
-                syncSettingsToFirebase();
-            };
-            sSlider.oninput = (e) => {
-                tSlider.value = e.target.value;
-                tVal.innerText = e.target.value;
-                sVal.innerText = e.target.value;
-                localStorage.setItem('threshold', e.target.value);
-                syncSettingsToFirebase();
-            };
+            if (tSlider && sSlider) {
+                tSlider.oninput = (e) => {
+                    sSlider.value = e.target.value;
+                    if (tVal) tVal.innerText = e.target.value;
+                    if (sVal) sVal.innerText = e.target.value;
+                    localStorage.setItem('threshold', e.target.value);
+                    syncSettingsToFirebase();
+                };
+                sSlider.oninput = (e) => {
+                    tSlider.value = e.target.value;
+                    if (tVal) tVal.innerText = e.target.value;
+                    if (sVal) sVal.innerText = e.target.value;
+                    localStorage.setItem('threshold', e.target.value);
+                    syncSettingsToFirebase();
+                };
+            }
 
-            document.getElementById('debug-mode-toggle').onchange = (e) => {
-                localStorage.setItem('debug-mode', e.target.checked);
-                updateDebugPanelVisibility();
-                syncSettingsToFirebase();
-            };
+            const debugToggle = document.getElementById('debug-mode-toggle');
+            if (debugToggle) {
+                debugToggle.onchange = (e) => {
+                    localStorage.setItem('debug-mode', e.target.checked);
+                    updateDebugPanelVisibility();
+                    syncSettingsToFirebase();
+                };
+            }
 
             const autoRefreshInput = document.getElementById('settings-auto-refresh-time');
             const autoRefreshUnit = document.getElementById('settings-auto-refresh-unit');
@@ -1768,6 +1804,10 @@
                 localStorage.setItem('solver-auto-refresh-val', val);
                 localStorage.setItem('solver-auto-refresh-unit', unit);
                 localStorage.setItem('solver-auto-refresh-seconds', solverAutoRefreshSeconds);
+                if (currentScreenshot) {
+                    if (solverAutoRefreshSeconds > 0) scheduleSolverAutoRefresh(solverAutoRefreshSeconds);
+                    else clearSolverAutoRefresh();
+                }
                 syncSettingsToFirebase();
             }
 
@@ -1829,8 +1869,10 @@
             window.addEventListener('pointerdown', handleAutoRevertUserActivity, { passive: true });
             window.addEventListener('keydown', handleAutoRevertUserActivity, { passive: true });
 
-            document.getElementById('screenshot-input').onchange = handleScreenshot;
-            document.getElementById('solve-btn').onclick = runPipeline;
+            const screenshotInput = document.getElementById('screenshot-input');
+            if (screenshotInput) screenshotInput.onchange = handleScreenshot;
+            const solveBtn = document.getElementById('solve-btn');
+            if (solveBtn) solveBtn.onclick = runPipeline;
 
             window.addEventListener('mousemove', handleDragging);
             window.addEventListener('mouseup', stopDragging);
@@ -3260,9 +3302,12 @@
         }
 
         function getFirestoreInstance(appInstance, databaseId) {
+            if (!appInstance) return null;
             let targetId = databaseId || localStorage.getItem('fb-databaseId') || 'ai-studio-48f55087-ae5a-4ab3-b4c4-0a15286e9759';
-            if (!targetId || targetId === '(default)') return appInstance.firestore();
-            if (appInstance.container && appInstance.container.getProvider) {
+            if (!targetId || targetId === '(default)') {
+                return (typeof appInstance.firestore === 'function') ? appInstance.firestore() : null;
+            }
+            if (typeof firebase !== 'undefined' && firebase.firestore && appInstance.container && appInstance.container.getProvider) {
                 try {
                     const provider = appInstance.container.getProvider("firestore");
                     const delegate = provider.getImmediate({ identifier: targetId });
@@ -3271,7 +3316,7 @@
                     console.warn("Could not instantiate named database, falling back to default:", e);
                 }
             }
-            return appInstance.firestore();
+            return (typeof appInstance.firestore === 'function') ? appInstance.firestore() : null;
         }
 
         let activeDbListeners = [];
@@ -3335,6 +3380,16 @@
             updateFirebaseStatus('connecting', 'Firebase: Connecting...');
 
             try {
+                if (typeof firebase === 'undefined' || !firebase.initializeApp) {
+                    console.warn("Firebase SDK not yet loaded or blocked by browser.");
+                    updateFirebaseStatus('disconnected', 'Firebase: Offline / Connecting...');
+                    setTimeout(() => {
+                        if (typeof firebase !== 'undefined' && firebase.initializeApp && !db) {
+                            initFirebase();
+                        }
+                    }, 1500);
+                    return;
+                }
                 if (firebase.apps.length === 0) firebaseApp = firebase.initializeApp(config);
                 else firebaseApp = firebase.app();
                 if (firebase.auth) {
@@ -3562,7 +3617,10 @@
             localStorage.setItem('fb-databaseId', databaseId);
             updateFirebaseStatus('connecting', 'Firebase: Testing Connection...');
             try {
-                if (firebase.apps.length > 0) await Promise.all(firebase.apps.map(app => app.delete()));
+                if (typeof firebase === 'undefined' || !firebase.initializeApp) {
+                    throw new Error("Firebase SDK is not loaded. Please check your internet connection.");
+                }
+                if (firebase.apps && firebase.apps.length > 0) await Promise.all(firebase.apps.map(app => app.delete()));
                 firebaseApp = firebase.initializeApp({ apiKey, authDomain, projectId, storageBucket, appId });
                 if (firebase.auth) {
                     try { if (!firebase.auth().currentUser) await firebase.auth().signInAnonymously(); } catch (e) {}
@@ -3598,14 +3656,15 @@
         }
 
         async function pruneBloatedDocuments(docRefs) {
-            if (!db || !docRefs || docRefs.length === 0) return;
+            if (!db || !docRefs || docRefs.length === 0 || typeof firebase === 'undefined' || !firebase.firestore) return;
             try {
                 for (let i = 0; i < docRefs.length; i += 400) {
                     const chunk = docRefs.slice(i, i + 400);
                     const batch = db.batch();
+                    const deleteField = firebase.firestore.FieldValue.delete();
                     for (let ref of chunk) {
                         batch.update(ref, {
-                            originalScreenshot: firebase.firestore.FieldValue.delete()
+                            originalScreenshot: deleteField
                         });
                     }
                     await batch.commit();
@@ -3780,6 +3839,9 @@
                 document.getElementById('screenshot-preview-container').classList.remove('hidden');
                 document.getElementById('solve-btn').disabled = false;
                 saveToStorage(currentScreenshot);
+                if (solverAutoRefreshSeconds > 0) {
+                    scheduleSolverAutoRefresh(solverAutoRefreshSeconds);
+                }
             };
             reader.readAsDataURL(file);
         }
@@ -3802,6 +3864,9 @@
                         document.getElementById('screenshot-preview-container').classList.remove('hidden');
                         document.getElementById('solve-btn').disabled = false;
                         saveToStorage(currentScreenshot);
+                        if (solverAutoRefreshSeconds > 0) {
+                            scheduleSolverAutoRefresh(solverAutoRefreshSeconds);
+                        }
                     };
                     reader.readAsDataURL(file);
                     break;
@@ -3844,6 +3909,7 @@
         }
 
         async function runPipeline() {
+            clearSolverAutoRefresh();
             const startTime = performance.now();
             const solveBtn = document.getElementById('solve-btn');
             solveBtn.disabled = true;
@@ -4145,6 +4211,9 @@
                 console.error("Pipeline error:", err);
                 matchSource.innerText = "Error: " + err.message;
                 resultNumbers.innerText = "000";
+                if (solverAutoRefreshSeconds > 0) {
+                    scheduleSolverAutoRefresh(solverAutoRefreshSeconds);
+                }
             } finally {
                 solveBtn.disabled = false;
                 solveBtn.innerText = "SOLVE";
@@ -5934,6 +6003,9 @@ Example: 132`;
             document.getElementById('screenshot-preview').src = currentScreenshot;
             document.getElementById('screenshot-preview-container').classList.remove('hidden');
             document.getElementById('solve-btn').disabled = false;
+            if (solverAutoRefreshSeconds > 0) {
+                scheduleSolverAutoRefresh(solverAutoRefreshSeconds);
+            }
             switchTab('solver');
         }
 
