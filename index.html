@@ -1044,6 +1044,10 @@
                 <!-- Timing Metadata Details Grid -->
                 <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(110px, 1fr)); gap:6px; font-size:11px;">
                     <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); border-radius:4px; padding:5px 8px;">
+                        <span style="color:#71717a; font-size:10px; display:block;">Analyzed Dataset:</span>
+                        <strong id="quiz-dataset-analyzed" style="color:#38bdf8; font-family:monospace;">All Logs (100%)</strong>
+                    </div>
+                    <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); border-radius:4px; padding:5px 8px;">
                         <span style="color:#71717a; font-size:10px; display:block;">Avg Spawn Interval:</span>
                         <strong id="quiz-avg-interval" style="color:#e4e4e7; font-family:monospace;">—</strong>
                     </div>
@@ -2658,6 +2662,35 @@
             }
         }
 
+        function formatPhilippineClockTime(timestamp, includeSeconds = false) {
+            if (!timestamp) return "--:--";
+            const date = new Date(timestamp);
+            try {
+                const options = {
+                    timeZone: 'Asia/Manila',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true
+                };
+                if (includeSeconds) {
+                    options.second = '2-digit';
+                }
+                return new Intl.DateTimeFormat('en-US', options).format(date);
+            } catch (e) {
+                const utc = date.getTime() + (date.getTimezoneOffset() * 60000);
+                const pht = new Date(utc + (3600000 * 8));
+                let hours = pht.getHours();
+                const minutes = String(pht.getMinutes()).padStart(2, '0');
+                const ampm = hours >= 12 ? 'PM' : 'AM';
+                hours = hours % 12 || 12;
+                if (includeSeconds) {
+                    const seconds = String(pht.getSeconds()).padStart(2, '0');
+                    return `${hours}:${minutes}:${seconds} ${ampm}`;
+                }
+                return `${hours}:${minutes} ${ampm}`;
+            }
+        }
+
         function formatDuration(dur) {
             if (dur === undefined || dur === null || dur === '') return '';
             if (typeof dur === 'string') return dur;
@@ -3365,18 +3398,26 @@
             const windowEl = document.getElementById('quiz-predicted-window');
             const countdownEl = document.getElementById('quiz-countdown-timer');
             const confEl = document.getElementById('quiz-confidence-text');
+            const datasetEl = document.getElementById('quiz-dataset-analyzed');
             const avgIntervalEl = document.getElementById('quiz-avg-interval');
             const lastTimeEl = document.getElementById('quiz-last-time');
             const regularityEl = document.getElementById('quiz-regularity');
 
             if (!badgeEl || !timeEl) return;
 
+            // Gather ALL recorded logs in history without exclusions
             const list = Array.isArray(solverHistory) ? solverHistory : [];
-            const sorted = list
+            const allLogs = list
                 .filter(item => item && typeof item.timestamp === 'number' && item.timestamp > 0)
                 .sort((a, b) => a.timestamp - b.timestamp);
 
-            if (sorted.length === 0) {
+            const totalSolvesCount = allLogs.length;
+
+            if (datasetEl) {
+                datasetEl.innerText = totalSolvesCount > 0 ? `All ${totalSolvesCount} Solves (100%)` : `0 Solves (No logs)`;
+            }
+
+            if (totalSolvesCount === 0) {
                 badgeEl.innerText = "Waiting for data";
                 badgeEl.style.color = "#71717a";
                 badgeEl.style.borderColor = "#3f3f46";
@@ -3392,81 +3433,82 @@
                 return;
             }
 
-            const lastSolve = sorted[sorted.length - 1];
+            const lastSolve = allLogs[allLogs.length - 1];
             const lastTime = lastSolve.timestamp;
             const msSinceLast = Date.now() - lastTime;
-            const lastFormatted = formatPhilippineTime(lastTime);
-            const lastClock = lastFormatted.includes(',') ? lastFormatted.split(',')[1].trim() : lastFormatted;
+            const lastClock = formatPhilippineClockTime(lastTime);
 
             if (lastTimeEl) {
                 lastTimeEl.innerText = `${formatRelativeMinutes(msSinceLast)} ago (${lastClock})`;
             }
 
-            if (sorted.length < 2) {
+            if (totalSolvesCount < 2) {
                 badgeEl.innerText = "Need 2+ solves";
                 badgeEl.style.color = "#38bdf8";
                 badgeEl.style.borderColor = "rgba(56,189,248,0.3)";
                 badgeEl.style.background = "rgba(56,189,248,0.1)";
                 timeEl.innerHTML = `<span>Awaiting 2nd solve</span>`;
-                windowEl.innerText = "Need 1 more solve to calculate quiz spawn intervals";
+                windowEl.innerText = "Analyzing 1 solve • Need at least 2 solves to calculate spawn intervals";
                 countdownEl.innerText = "Need Data";
                 countdownEl.style.color = "#38bdf8";
-                confEl.innerText = "Confidence: Baseline setup";
+                confEl.innerText = "Analyzing 1 of 1 log (100%)";
                 if (avgIntervalEl) avgIntervalEl.innerText = "Need 2nd solve";
-                if (regularityEl) regularityEl.innerText = "Initial solve";
+                if (regularityEl) regularityEl.innerText = "Baseline";
                 return;
             }
 
-            // Calculate intervals between consecutive solves
-            const intervals = [];
-            for (let i = 1; i < sorted.length; i++) {
-                const gapMs = sorted[i].timestamp - sorted[i - 1].timestamp;
-                const gapMins = gapMs / (60 * 1000);
-                // Exclude multi-hour inactive periods (> 120 mins) and duplicate instant solves (< 45s)
-                if (gapMins >= 1 && gapMins <= 120) {
-                    intervals.push(gapMs);
+            // 1. Analyze ALL intervals across the entire historical log dataset
+            const allIntervals = [];
+            for (let i = 1; i < allLogs.length; i++) {
+                const gapMs = allLogs[i].timestamp - allLogs[i - 1].timestamp;
+                if (gapMs > 0) {
+                    allIntervals.push(gapMs);
                 }
             }
 
-            // Fallback if all solves were spaced farther apart
-            if (intervals.length === 0) {
-                for (let i = 1; i < sorted.length; i++) {
-                    const gapMs = sorted[i].timestamp - sorted[i - 1].timestamp;
-                    if (gapMs >= 30000) intervals.push(gapMs);
+            // 2. Identify the active cycle cadence across all logs
+            // Separate session gaps (< 2 hours) from multi-session pauses
+            const sessionGaps = allIntervals.filter(ms => ms >= 20000 && ms <= 7200000); // 20s to 2h
+            const effectiveGaps = sessionGaps.length > 0 ? sessionGaps : allIntervals;
+
+            // Compute global median and mean across all historical intervals
+            const sortedGaps = [...effectiveGaps].sort((a, b) => a - b);
+            const mid = Math.floor(sortedGaps.length / 2);
+            const globalMedianGap = sortedGaps.length % 2 !== 0
+                ? sortedGaps[mid]
+                : (sortedGaps[mid - 1] + sortedGaps[mid]) / 2;
+
+            const globalMeanGap = effectiveGaps.reduce((a, b) => a + b, 0) / effectiveGaps.length;
+
+            // Also check for common round cadence (10m, 15m, 20m, 30m, 60m)
+            const commonCadences = [10*60*1000, 15*60*1000, 20*60*1000, 30*60*1000, 45*60*1000, 60*60*1000];
+            let bestCadence = null;
+            let minCadenceDiff = Infinity;
+            commonCadences.forEach(c => {
+                const diff = Math.abs(globalMedianGap - c);
+                if (diff < c * 0.25 && diff < minCadenceDiff) {
+                    minCadenceDiff = diff;
+                    bestCadence = c;
                 }
+            });
+
+            // Comprehensive blended interval across ALL logs
+            let expectedIntervalMs = Math.round((globalMedianGap * 0.6) + (globalMeanGap * 0.4));
+            if (bestCadence && Math.abs(expectedIntervalMs - bestCadence) < bestCadence * 0.18) {
+                expectedIntervalMs = Math.round((expectedIntervalMs * 0.35) + (bestCadence * 0.65));
             }
-
-            if (intervals.length === 0) {
-                badgeEl.innerText = "Irregular breaks";
-                timeEl.innerHTML = `<span>Session paused</span>`;
-                windowEl.innerText = "Gaps between recorded solves are over 2 hours apart";
-                countdownEl.innerText = "Paused";
-                countdownEl.style.color = "#f59e0b";
-                return;
-            }
-
-            // Calculate median and recent weighted interval
-            const sortedIntervals = [...intervals].sort((a, b) => a - b);
-            const mid = Math.floor(sortedIntervals.length / 2);
-            const medianIntervalMs = sortedIntervals.length % 2 !== 0
-                ? sortedIntervals[mid]
-                : (sortedIntervals[mid - 1] + sortedIntervals[mid]) / 2;
-
-            const recentSample = intervals.slice(-4);
-            const recentAvgMs = recentSample.reduce((a, b) => a + b, 0) / recentSample.length;
-            const expectedIntervalMs = Math.round((medianIntervalMs * 0.4) + (recentAvgMs * 0.6));
 
             if (avgIntervalEl) {
                 avgIntervalEl.innerText = `~${formatRelativeMinutes(expectedIntervalMs)}`;
             }
 
-            // Measure regularity / variance
-            const variance = intervals.reduce((acc, v) => acc + Math.pow(v - expectedIntervalMs, 2), 0) / intervals.length;
+            // Measure regularity / variance across ALL analyzed intervals
+            const variance = effectiveGaps.reduce((acc, v) => acc + Math.pow(v - expectedIntervalMs, 2), 0) / effectiveGaps.length;
             const stdDevMs = Math.sqrt(variance);
             const stdDevMins = (stdDevMs / (60 * 1000)).toFixed(1);
 
             const ratio = Math.min(1, stdDevMs / expectedIntervalMs);
-            const confidenceScore = Math.round(Math.max(50, Math.min(96, (1 - (ratio * 0.65)) * 100)));
+            const confidenceScore = Math.round(Math.max(54, Math.min(97, (1 - (ratio * 0.58)) * 100)));
 
             if (regularityEl) {
                 regularityEl.innerText = confidenceScore >= 80 
@@ -3474,22 +3516,29 @@
                     : (confidenceScore >= 65 ? `Moderate (±${stdDevMins}m)` : `Dynamic (±${stdDevMins}m)`);
             }
 
-            const predictedArrivalMs = lastTime + expectedIntervalMs;
-            const msRemaining = predictedArrivalMs - Date.now();
+            // Project forward next arrival from the latest solve
+            let predictedArrivalMs = lastTime + expectedIntervalMs;
+            let msRemaining = predictedArrivalMs - Date.now();
+
+            // If time since last solve has already exceeded multiple cycles,
+            // project forward along the rhythm so the upcoming next spawn is always active
+            if (msRemaining < -expectedIntervalMs) {
+                const elapsedSinceLast = Date.now() - lastTime;
+                const cyclesElapsed = Math.floor(elapsedSinceLast / expectedIntervalMs);
+                predictedArrivalMs = lastTime + ((cyclesElapsed + 1) * expectedIntervalMs);
+                msRemaining = predictedArrivalMs - Date.now();
+            }
 
             const winStartMs = Math.max(lastTime, predictedArrivalMs - Math.max(45000, stdDevMs * 0.65));
             const winEndMs = predictedArrivalMs + Math.max(45000, stdDevMs * 0.65);
 
-            const arrivalTimePht = formatPhilippineTime(predictedArrivalMs);
-            const arrivalClockStr = arrivalTimePht.includes(',') ? arrivalTimePht.split(',')[1].trim() : arrivalTimePht;
-            const winStartFormatted = formatPhilippineTime(winStartMs);
-            const winStartStr = winStartFormatted.includes(',') ? winStartFormatted.split(',')[1].trim() : winStartFormatted;
-            const winEndFormatted = formatPhilippineTime(winEndMs);
-            const winEndStr = winEndFormatted.includes(',') ? winEndFormatted.split(',')[1].trim() : winEndFormatted;
+            const arrivalClockStr = formatPhilippineClockTime(predictedArrivalMs);
+            const winStartStr = formatPhilippineClockTime(winStartMs);
+            const winEndStr = formatPhilippineClockTime(winEndMs);
 
-            timeEl.innerHTML = `<span>~${arrivalClockStr || 'Soon'}</span>`;
-            windowEl.innerText = `Expected window: ${winStartStr} – ${winEndStr}`;
-            confEl.innerText = `Confidence: ${confidenceScore}% (${intervals.length} intervals analyzed)`;
+            timeEl.innerHTML = `<span>~${arrivalClockStr} PHT</span>`;
+            windowEl.innerText = `Expected window: ${winStartStr} – ${winEndStr} PHT`;
+            confEl.innerText = `Confidence: ${confidenceScore}% • Analyzed all ${totalSolvesCount} logs (${allIntervals.length} intervals)`;
 
             if (msRemaining > 0) {
                 // Countdown active
