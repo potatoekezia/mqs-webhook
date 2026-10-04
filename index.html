@@ -1078,6 +1078,43 @@
                 </div>
             </div>
 
+            <!-- Daily Quiz Quota Tracker (Target: 3 Quizzes/Day) -->
+            <div id="daily-quota-tracker-card" style="background:#141416; border:1px solid rgba(255,255,255,0.06); border-radius:8px; padding:12px; margin-bottom:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:6px;">
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <span style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; color:#4ade80; display:flex; align-items:center; gap:6px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                            Daily Quiz Quota (3/Day)
+                        </span>
+                        <span style="font-size:10px; color:#71717a; font-family:monospace;">Target: 3 Quizzes / Day</span>
+                    </div>
+
+                    <div style="display:flex; align-items:center; gap:6px;">
+                        <label style="font-size:10px; color:#71717a; text-transform:uppercase; font-weight:600;">Filter Solver:</label>
+                        <select id="daily-quota-user-select" onchange="updateDailyQuotaTracker()" style="font-size:11px; padding:3px 8px; background:#1e1e20; color:#fff; border:1px solid #333; border-radius:4px; margin-bottom:0;">
+                            <option value="all">All Solvers</option>
+                            <option value="me" selected>My Quota Only</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Today's Quota Highlight Card -->
+                <div id="daily-quota-today-banner" style="background:rgba(255,255,255,0.02); border:1px solid rgba(255,255,255,0.05); border-radius:6px; padding:10px 12px; margin-bottom:10px;">
+                    <!-- Rendered dynamically -->
+                </div>
+
+                <!-- Daily Breakdown Table / List -->
+                <div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                        <span style="font-size:10px; font-weight:700; color:#71717a; text-transform:uppercase;">Daily History Log</span>
+                        <span id="daily-quota-total-days-badge" style="font-size:10px; color:#a1a1aa; font-family:monospace;">0 recorded days</span>
+                    </div>
+                    <div id="daily-quota-history-list" style="display:flex; flex-direction:column; gap:6px; max-height:220px; overflow-y:auto; overflow-x:hidden; padding-right:4px; scrollbar-width:thin; scrollbar-color:rgba(255,255,255,0.2) transparent;">
+                        <!-- Daily cards rendered dynamically -->
+                    </div>
+                </div>
+            </div>
+
             <!-- Answer Choice Distribution & Storage Savings -->
             <div style="background:#141416; border:1px solid rgba(255,255,255,0.06); border-radius:6px; padding:8px 12px; margin-bottom:10px;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:4px;">
@@ -3821,6 +3858,298 @@
             if (infoEl) infoEl.innerText = 'Keeps full solve logs in DB • Auto-clears heavy circle images after 24h';
         }
 
+        function getPhilippineDateKey(timestamp) {
+            if (!timestamp) return 'Unknown';
+            const date = new Date(timestamp);
+            try {
+                const options = {
+                    timeZone: 'Asia/Manila',
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                };
+                return new Intl.DateTimeFormat('en-US', options).format(date);
+            } catch (e) {
+                const utc = date.getTime() + (date.getTimezoneOffset() * 60000);
+                const pht = new Date(utc + (3600000 * 8));
+                const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+                return `${months[pht.getMonth()]} ${pht.getDate()}, ${pht.getFullYear()}`;
+            }
+        }
+
+        function updateDailyQuotaTracker() {
+            const todayBanner = document.getElementById('daily-quota-today-banner');
+            const historyList = document.getElementById('daily-quota-history-list');
+            const totalDaysBadge = document.getElementById('daily-quota-total-days-badge');
+            const userSelect = document.getElementById('daily-quota-user-select');
+
+            if (!todayBanner || !historyList) return;
+
+            const allLogs = Array.isArray(solverHistory) ? solverHistory : [];
+            const currentUser = (getSolverUserName() || 'Anonymous').trim();
+            const currentLower = currentUser.toLowerCase();
+
+            // Populate userSelect options while preserving current value
+            if (userSelect) {
+                const selectedVal = userSelect.value || 'me';
+                const userSet = new Set();
+                allLogs.forEach(item => {
+                    const u = (item?.user || 'Anonymous').trim();
+                    if (u) userSet.add(u);
+                });
+
+                const expectedOptions = ['all', 'me', ...Array.from(userSet).filter(u => u.toLowerCase() !== currentLower)];
+                const currentOptionValues = Array.from(userSelect.options).map(o => o.value);
+                const isDifferent = expectedOptions.length !== currentOptionValues.length || 
+                                    expectedOptions.some((v, idx) => v !== currentOptionValues[idx]);
+
+                if (isDifferent) {
+                    let html = `<option value="all">All Solvers</option>`;
+                    html += `<option value="me">My Quota Only (${escapeHtml(currentUser)})</option>`;
+                    Array.from(userSet).forEach(u => {
+                        if (u.toLowerCase() !== currentLower) {
+                            html += `<option value="${escapeHtml(u)}">${escapeHtml(u)}</option>`;
+                        }
+                    });
+                    userSelect.innerHTML = html;
+                    if (expectedOptions.includes(selectedVal)) {
+                        userSelect.value = selectedVal;
+                    } else {
+                        userSelect.value = 'me';
+                    }
+                }
+            }
+
+            const activeFilter = userSelect ? userSelect.value : 'me';
+
+            // Today's date key in Philippine Time
+            const todayKey = getPhilippineDateKey(Date.now());
+            const yesterdayKey = getPhilippineDateKey(Date.now() - 86400000);
+
+            // Group all solves by (dateKey, user)
+            const dayMap = new Map();
+
+            allLogs.forEach(item => {
+                if (!item || typeof item.timestamp !== 'number') return;
+                const dKey = getPhilippineDateKey(item.timestamp);
+                const u = (item.user || 'Anonymous').trim() || 'Anonymous';
+                const uKey = u.toLowerCase();
+
+                if (!dayMap.has(dKey)) {
+                    dayMap.set(dKey, {
+                        dateKey: dKey,
+                        sampleTimestamp: item.timestamp,
+                        users: new Map()
+                    });
+                }
+                const dayEntry = dayMap.get(dKey);
+                if (item.timestamp > dayEntry.sampleTimestamp) {
+                    dayEntry.sampleTimestamp = item.timestamp;
+                }
+
+                if (!dayEntry.users.has(uKey)) {
+                    dayEntry.users.set(uKey, { displayName: u, solves: [] });
+                }
+                dayEntry.users.get(uKey).solves.push(item);
+            });
+
+            // Ensure today exists in dayMap even if 0 solves
+            if (!dayMap.has(todayKey)) {
+                dayMap.set(todayKey, {
+                    dateKey: todayKey,
+                    sampleTimestamp: Date.now(),
+                    users: new Map()
+                });
+            }
+
+            // Calculate Today's quota status
+            const todayEntry = dayMap.get(todayKey);
+            let todayDone = 0;
+            const todayTarget = 3;
+
+            if (activeFilter === 'me') {
+                const myEntry = todayEntry.users.get(currentLower);
+                todayDone = myEntry ? myEntry.solves.length : 0;
+            } else if (activeFilter === 'all') {
+                const myEntry = todayEntry.users.get(currentLower);
+                todayDone = myEntry ? myEntry.solves.length : 0;
+            } else {
+                const targetEntry = todayEntry.users.get(activeFilter.toLowerCase());
+                todayDone = targetEntry ? targetEntry.solves.length : 0;
+            }
+
+            // Render Today's Highlight Banner
+            const targetUserDisplay = activeFilter === 'me' ? 'Your' : (activeFilter === 'all' ? `${currentUser}'s` : `${activeFilter}'s`);
+            const pct = Math.min(100, Math.round((todayDone / todayTarget) * 100));
+
+            let statusColor = '#38bdf8';
+            let statusText = '';
+            if (todayDone >= 3) {
+                statusColor = '#4ade80'; // Success green
+                statusText = todayDone === 3 ? '✅ 3/3 Goal Met! Quota Completed!' : `⭐ ${todayDone}/3 Goal Exceeded! Outstanding!`;
+            } else if (todayDone === 2) {
+                statusColor = '#fbbf24'; // Amber
+                statusText = '⏳ 2/3 Done • 1 more quiz needed today';
+            } else if (todayDone === 1) {
+                statusColor = '#f97316'; // Orange
+                statusText = '⏳ 1/3 Done • 2 more quizzes needed today';
+            } else {
+                statusColor = '#71717a'; // Muted
+                statusText = '⚠️ 0/3 Done • 3 quizzes needed today';
+            }
+
+            // 3-step indicator circles
+            const step1 = todayDone >= 1 ? 'background:#4ade80; color:#000; border-color:#4ade80;' : 'background:rgba(255,255,255,0.05); color:#71717a; border-color:#444;';
+            const step2 = todayDone >= 2 ? 'background:#4ade80; color:#000; border-color:#4ade80;' : 'background:rgba(255,255,255,0.05); color:#71717a; border-color:#444;';
+            const step3 = todayDone >= 3 ? 'background:#4ade80; color:#000; border-color:#4ade80;' : 'background:rgba(255,255,255,0.05); color:#71717a; border-color:#444;';
+
+            todayBanner.innerHTML = `
+                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:8px;">
+                    <div>
+                        <div style="font-size:10px; color:#a1a1aa; text-transform:uppercase; font-weight:700; letter-spacing:0.5px;">Today's Quota (${todayKey})</div>
+                        <div style="font-size:16px; font-weight:800; color:#fff; display:flex; align-items:center; gap:6px; margin-top:2px;">
+                            <span>${targetUserDisplay} Progress:</span>
+                            <span style="font-family:monospace; color:${statusColor};">${todayDone} / ${todayTarget}</span>
+                            <span style="font-size:11px; font-weight:600; color:#a1a1aa;">(${pct}%)</span>
+                        </div>
+                    </div>
+                    <div style="text-align:right;">
+                        <span style="display:inline-block; font-size:11px; font-weight:700; color:${statusColor}; background:rgba(255,255,255,0.05); border:1px solid ${statusColor}44; padding:3px 8px; border-radius:4px;">
+                            ${statusText}
+                        </span>
+                    </div>
+                </div>
+
+                <!-- 3-quiz visual checklist segments -->
+                <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:6px;">
+                    <div style="display:flex; align-items:center; gap:6px; padding:6px 8px; border-radius:4px; border:1px solid rgba(255,255,255,0.08); background:#18181b;">
+                        <div style="width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:900; border:1px solid; ${step1}">
+                            ${todayDone >= 1 ? '✓' : '1'}
+                        </div>
+                        <span style="font-size:11px; font-weight:600; color:${todayDone >= 1 ? '#fff' : '#71717a'};">Quiz 1</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px; padding:6px 8px; border-radius:4px; border:1px solid rgba(255,255,255,0.08); background:#18181b;">
+                        <div style="width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:900; border:1px solid; ${step2}">
+                            ${todayDone >= 2 ? '✓' : '2'}
+                        </div>
+                        <span style="font-size:11px; font-weight:600; color:${todayDone >= 2 ? '#fff' : '#71717a'};">Quiz 2</span>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:6px; padding:6px 8px; border-radius:4px; border:1px solid rgba(255,255,255,0.08); background:#18181b;">
+                        <div style="width:18px; height:18px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:900; border:1px solid; ${step3}">
+                            ${todayDone >= 3 ? '✓' : '3'}
+                        </div>
+                        <span style="font-size:11px; font-weight:600; color:${todayDone >= 3 ? '#fff' : '#71717a'};">Quiz 3</span>
+                    </div>
+                </div>
+            `;
+
+            // Prepare Daily Breakdown List
+            const sortedDays = Array.from(dayMap.values()).sort((a, b) => b.sampleTimestamp - a.sampleTimestamp);
+
+            // Filter rows based on activeFilter
+            const dailyRows = [];
+
+            sortedDays.forEach(day => {
+                const isToday = day.dateKey === todayKey;
+                const isYesterday = day.dateKey === yesterdayKey;
+                const dateLabel = isToday ? `Today (${day.dateKey})` : (isYesterday ? `Yesterday (${day.dateKey})` : day.dateKey);
+
+                if (activeFilter === 'all') {
+                    if (day.users.size === 0) {
+                        dailyRows.push({
+                            dateLabel,
+                            isToday,
+                            user: currentUser,
+                            isMe: true,
+                            count: 0
+                        });
+                    } else {
+                        day.users.forEach((userData, uKey) => {
+                            dailyRows.push({
+                                dateLabel,
+                                isToday,
+                                user: userData.displayName,
+                                isMe: uKey === currentLower,
+                                count: userData.solves.length
+                            });
+                        });
+                    }
+                } else if (activeFilter === 'me') {
+                    const myEntry = day.users.get(currentLower);
+                    dailyRows.push({
+                        dateLabel,
+                        isToday,
+                        user: currentUser,
+                        isMe: true,
+                        count: myEntry ? myEntry.solves.length : 0
+                    });
+                } else {
+                    const targetLower = activeFilter.toLowerCase();
+                    const entry = day.users.get(targetLower);
+                    dailyRows.push({
+                        dateLabel,
+                        isToday,
+                        user: activeFilter,
+                        isMe: targetLower === currentLower,
+                        count: entry ? entry.solves.length : 0
+                    });
+                }
+            });
+
+            if (totalDaysBadge) {
+                totalDaysBadge.innerText = `${sortedDays.length} recorded day${sortedDays.length === 1 ? '' : 's'}`;
+            }
+
+            if (dailyRows.length === 0) {
+                historyList.innerHTML = `<div style="font-size:11px; color:#71717a; text-align:center; padding:10px;">No daily history recorded.</div>`;
+                return;
+            }
+
+            historyList.innerHTML = dailyRows.map(row => {
+                const count = row.count;
+                const target = 3;
+                let badgeHtml = '';
+
+                if (count >= 3) {
+                    badgeHtml = `<span style="background:rgba(74,222,128,0.15); border:1px solid rgba(74,222,128,0.4); color:#4ade80; padding:2px 7px; border-radius:4px; font-weight:800; font-size:11px;">✅ ${count}/${target} Met</span>`;
+                } else if (count === 2) {
+                    badgeHtml = `<span style="background:rgba(251,191,36,0.15); border:1px solid rgba(251,191,36,0.4); color:#fbbf24; padding:2px 7px; border-radius:4px; font-weight:700; font-size:11px;">⏳ 2/${target} (1 left)</span>`;
+                } else if (count === 1) {
+                    badgeHtml = `<span style="background:rgba(249,115,22,0.15); border:1px solid rgba(249,115,22,0.4); color:#f97316; padding:2px 7px; border-radius:4px; font-weight:700; font-size:11px;">⏳ 1/${target} (2 left)</span>`;
+                } else {
+                    badgeHtml = `<span style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1); color:#71717a; padding:2px 7px; border-radius:4px; font-weight:600; font-size:11px;">0/${target} Done</span>`;
+                }
+
+                const userInitial = (row.user.charAt(0) || 'U').toUpperCase();
+
+                return `
+                    <div style="background:#18181b; border:1px solid rgba(255,255,255,0.05); border-radius:6px; padding:7px 10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <div style="width:24px; height:24px; border-radius:50%; background:rgba(74,222,128,0.12); border:1px solid rgba(74,222,128,0.3); color:#4ade80; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:800; flex-shrink:0;">
+                                ${userInitial}
+                            </div>
+                            <div>
+                                <div style="font-weight:700; font-size:12px; color:#fff; display:flex; align-items:center; gap:6px;">
+                                    <span>${escapeHtml(row.user)}</span>
+                                    ${row.isMe ? '<span style="font-size:9px; background:rgba(187,134,252,0.2); color:var(--accent); padding:1px 5px; border-radius:3px; border:1px solid rgba(187,134,252,0.4)">YOU</span>' : ''}
+                                </div>
+                                <div style="font-size:10px; color:#a1a1aa;">
+                                    ${row.dateLabel}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; align-items:center; gap:8px; text-align:right;">
+                            <span style="font-size:12px; font-weight:800; font-family:monospace; color:#fff;">
+                                ${count} <span style="font-size:10px; font-weight:normal; color:#71717a;">/ 3 quizzes</span>
+                            </span>
+                            ${badgeHtml}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
         function startHistoryResetTicker() {
             if (historyResetTicker) return;
             historyResetTicker = setInterval(() => {
@@ -3837,6 +4166,7 @@
             updateHistoryAnalytics();
             updateHistoryResetTimer();
             updateNextQuizArrivalPrediction();
+            updateDailyQuotaTracker();
             applyHistoryFiltersAndSort();
         }
 
