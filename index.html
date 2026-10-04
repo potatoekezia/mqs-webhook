@@ -990,41 +990,107 @@
                 <span id="history-active-user-badge" style="font-size:13px; font-weight:700; color:var(--accent)">Anonymous</span>
             </div>
             <div style="display:flex; align-items:center; gap:8px;">
-                <span style="font-size:11px; padding:3px 7px; border-radius:4px; background:rgba(255,255,255,0.06); color:#aaa; display:flex; align-items:center; gap:4px;" title="Solves automatically clear after 24 hours and are capped at 50 to prevent database bloat">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                    24h Auto-Clear (Max 50)
+                <span id="history-retention-badge" style="font-size:11px; padding:3px 7px; border-radius:4px; background:rgba(3,218,198,0.12); border:1px solid rgba(3,218,198,0.3); color:var(--success); display:flex; align-items:center; gap:4px;" title="Logs & details are preserved in database; heavy circle crop images are automatically pruned after 24h to save DB and local space">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                    24h Image Pruning (Logs Kept)
                 </span>
                 <span id="history-count" style="color:#fff; font-weight:700">0 solves</span>
             </div>
         </div>
 
-        <!-- Simple Analytics & Reset Timer Section -->
+        <!-- History Analytics & Predictor Section -->
         <div class="card" style="margin-bottom:12px; padding:12px 14px; background:#1e1e1e; border:1px solid rgba(255,255,255,0.08);">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
                 <span style="font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--accent); display:flex; align-items:center; gap:6px;">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                    History Analytics
+                    History Analytics &amp; Predictor
                 </span>
                 <span id="history-reset-badge" style="font-size:11px; color:#38bdf8; font-family:monospace; background:rgba(56,189,248,0.1); border:1px solid rgba(56,189,248,0.25); border-radius:4px; padding:2px 7px;">
-                    ⏳ Reset: Inactive
+                    ⏳ Prune: Inactive
                 </span>
+            </div>
+
+            <!-- Next Quiz Arrival & Spawn Predictor -->
+            <div id="next-quiz-timing-predictor" style="background:linear-gradient(135deg, rgba(56,189,248,0.12), rgba(187,134,252,0.10)); border:1px solid rgba(56,189,248,0.35); border-radius:8px; padding:12px; margin-bottom:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:6px;">
+                    <span style="font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; color:#38bdf8; display:flex; align-items:center; gap:6px;">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        Next Quiz Arrival Predictor
+                    </span>
+                    <span id="quiz-spawn-status-badge" style="font-size:10px; font-weight:700; color:#38bdf8; background:rgba(56,189,248,0.15); border:1px solid rgba(56,189,248,0.3); border-radius:4px; padding:2px 8px; font-family:monospace;">
+                        Calculating...
+                    </span>
+                </div>
+
+                <!-- Main Prediction Display -->
+                <div style="display:flex; justify-content:space-between; align-items:center; background:#141416; border:1px solid rgba(255,255,255,0.06); border-radius:6px; padding:10px 12px; margin-bottom:8px; flex-wrap:wrap; gap:10px;">
+                    <div style="display:flex; flex-direction:column; gap:2px;">
+                        <span style="font-size:10px; color:var(--text-secondary); text-transform:uppercase; font-weight:600;">Estimated Arrival Time</span>
+                        <div id="quiz-predicted-time" style="font-size:18px; font-weight:800; color:#fff; font-family:monospace; display:flex; align-items:center; gap:8px;">
+                            <span>—:— PHT</span>
+                        </div>
+                        <span id="quiz-predicted-window" style="font-size:11px; color:#a1a1aa;">Expected window: —</span>
+                    </div>
+
+                    <div style="text-align:right; display:flex; flex-direction:column; align-items:flex-end; gap:2px;">
+                        <span style="font-size:10px; color:var(--text-secondary); text-transform:uppercase; font-weight:600;">Countdown to Next Quiz</span>
+                        <div id="quiz-countdown-timer" style="font-size:20px; font-weight:900; color:var(--success); font-family:monospace; letter-spacing:1px;">
+                            --:--
+                        </div>
+                        <span id="quiz-confidence-text" style="font-size:11px; color:#38bdf8; font-weight:600;">Confidence: —</span>
+                    </div>
+                </div>
+
+                <!-- Timing Metadata Details Grid -->
+                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(110px, 1fr)); gap:6px; font-size:11px;">
+                    <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); border-radius:4px; padding:5px 8px;">
+                        <span style="color:#71717a; font-size:10px; display:block;">Avg Spawn Interval:</span>
+                        <strong id="quiz-avg-interval" style="color:#e4e4e7; font-family:monospace;">—</strong>
+                    </div>
+                    <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); border-radius:4px; padding:5px 8px;">
+                        <span style="color:#71717a; font-size:10px; display:block;">Last Quiz Solved:</span>
+                        <strong id="quiz-last-time" style="color:#e4e4e7; font-family:monospace;">—</strong>
+                    </div>
+                    <div style="background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.05); border-radius:4px; padding:5px 8px;">
+                        <span style="color:#71717a; font-size:10px; display:block;">Interval Regularity:</span>
+                        <strong id="quiz-regularity" style="color:var(--accent); font-family:monospace;">—</strong>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Answer Choice Distribution & Storage Savings -->
+            <div style="background:#141416; border:1px solid rgba(255,255,255,0.06); border-radius:6px; padding:8px 12px; margin-bottom:10px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; flex-wrap:wrap; gap:4px;">
+                    <span style="font-size:11px; font-weight:700; color:var(--text-secondary); text-transform:uppercase;">Answer Choice Frequency (A1 - A4)</span>
+                    <span id="analytics-space-saved" style="font-size:11px; color:var(--success); font-weight:600; display:inline-flex; align-items:center; gap:4px;">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                        0 KB saved by 24h prune
+                    </span>
+                </div>
+                <div id="analytics-frequency-bars" style="display:grid; grid-template-columns: repeat(4, 1fr); gap:8px;">
+                    <!-- A1 to A4 visual frequency cards -->
+                </div>
             </div>
 
             <!-- Reset Countdown Banner -->
             <div style="background:#141416; border:1px solid rgba(255,255,255,0.06); border-radius:6px; padding:8px 12px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
                 <div style="display:flex; align-items:center; gap:7px;">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#38bdf8" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 14 10"/></svg>
-                    <span style="font-size:12px; color:var(--text-secondary);">History Reset Timer:</span>
-                    <strong id="history-reset-countdown" style="font-size:12px; color:#fff; font-family:monospace; letter-spacing:0.5px;">No active timer (24h retention)</strong>
+                    <span style="font-size:12px; color:var(--text-secondary);">24h Image Prune Status:</span>
+                    <strong id="history-reset-countdown" style="font-size:12px; color:#fff; font-family:monospace; letter-spacing:0.5px;">All images active or pruned</strong>
                 </div>
-                <span id="history-retention-info" style="font-size:11px; color:var(--text-secondary);">24h rolling reset • Auto-clears at 50</span>
+                <span id="history-retention-info" style="font-size:11px; color:var(--text-secondary);">Logs kept permanently in DB • Images cleared after 24h</span>
             </div>
 
-            <!-- Simple Analytics Stat Grid -->
-            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(100px, 1fr)); gap:8px;">
+            <!-- Comprehensive Analytics Stat Grid -->
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(90px, 1fr)); gap:8px;">
                 <div style="background:#141416; border:1px solid rgba(255,255,255,0.05); border-radius:6px; padding:8px 10px; text-align:center;">
                     <div style="font-size:10px; color:var(--text-secondary); text-transform:uppercase; font-weight:600">Total Solves</div>
-                    <div id="analytics-total-solves" style="font-size:15px; font-weight:800; color:#fff; margin-top:2px; font-family:monospace;">0 / 50</div>
+                    <div id="analytics-total-solves" style="font-size:15px; font-weight:800; color:#fff; margin-top:2px; font-family:monospace;">0</div>
+                </div>
+                <div style="background:#141416; border:1px solid rgba(255,255,255,0.05); border-radius:6px; padding:8px 10px; text-align:center;">
+                    <div style="font-size:10px; color:var(--text-secondary); text-transform:uppercase; font-weight:600">Images Kept</div>
+                    <div id="analytics-active-images" style="font-size:14px; font-weight:800; color:var(--success); margin-top:2px; font-family:monospace;">0 &lt;24h</div>
                 </div>
                 <div style="background:#141416; border:1px solid rgba(255,255,255,0.05); border-radius:6px; padding:8px 10px; text-align:center;">
                     <div style="font-size:10px; color:var(--text-secondary); text-transform:uppercase; font-weight:600">Avg Time</div>
@@ -1035,8 +1101,12 @@
                     <div id="analytics-fastest-time" style="font-size:15px; font-weight:800; color:var(--success); margin-top:2px; font-family:monospace;">—</div>
                 </div>
                 <div style="background:#141416; border:1px solid rgba(255,255,255,0.05); border-radius:6px; padding:8px 10px; text-align:center;">
+                    <div style="font-size:10px; color:var(--text-secondary); text-transform:uppercase; font-weight:600">Blitz (&lt;3s)</div>
+                    <div id="analytics-blitz-rate" style="font-size:14px; font-weight:800; color:#c084fc; margin-top:2px; font-family:monospace;">—</div>
+                </div>
+                <div style="background:#141416; border:1px solid rgba(255,255,255,0.05); border-radius:6px; padding:8px 10px; text-align:center;">
                     <div style="font-size:10px; color:var(--text-secondary); text-transform:uppercase; font-weight:600">Top User</div>
-                    <div id="analytics-top-user" style="font-size:13px; font-weight:700; color:var(--accent); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="Top User">—</div>
+                    <div id="analytics-top-user" style="font-size:12px; font-weight:700; color:var(--accent); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="Top User">—</div>
                 </div>
             </div>
         </div>
@@ -1073,6 +1143,7 @@
                     <button type="button" id="btn-filter-all" class="btn btn-secondary date-filter-btn" style="width:auto; padding:4px 10px; margin:0; font-size:11px; border-color:var(--accent); color:var(--accent)" onclick="setDateFilter('all')">All Time</button>
                     <button type="button" id="btn-filter-today" class="btn btn-secondary date-filter-btn" style="width:auto; padding:4px 10px; margin:0; font-size:11px" onclick="setDateFilter('today')">Today</button>
                     <button type="button" id="btn-filter-7days" class="btn btn-secondary date-filter-btn" style="width:auto; padding:4px 10px; margin:0; font-size:11px" onclick="setDateFilter('7days')">Last 7 Days</button>
+                    <button type="button" id="btn-filter-images" class="btn btn-secondary date-filter-btn" style="width:auto; padding:4px 10px; margin:0; font-size:11px" onclick="setDateFilter('images')">With Images (&lt;24h)</button>
                 </div>
                 <button type="button" class="btn btn-secondary" style="width:auto; padding:4px 10px; margin:0; font-size:11px; color:var(--text-secondary)" onclick="resetHistoryFilters()">Reset</button>
             </div>
@@ -1607,6 +1678,47 @@
             event.preventDefault();
         });
 
+        // Safe JSON stringify that guards against circular references, DOM nodes, and Firestore internal SDK objects (Yn, fe, etc.)
+        function safeStringify(obj, space) {
+            const seen = new WeakSet();
+            try {
+                return JSON.stringify(obj, (key, value) => {
+                    if (typeof value === 'object' && value !== null) {
+                        if (seen.has(value)) {
+                            return undefined; // Drop circular reference cleanly
+                        }
+                        if (value instanceof Node || 
+                            value instanceof Window ||
+                            (value._delegate !== undefined && value.firestore !== undefined) ||
+                            (value.constructor && (
+                                value.constructor.name === 'Yn' || 
+                                value.constructor.name === 'fe' || 
+                                value.constructor.name === 'Firestore' || 
+                                value.constructor.name === 'DocumentReference' || 
+                                value.constructor.name === 'CollectionReference' || 
+                                value.constructor.name === 'QuerySnapshot'
+                            ))) {
+                            return undefined;
+                        }
+                        seen.add(value);
+                    }
+                    return value;
+                }, space);
+            } catch (err) {
+                console.warn("[safeStringify] Handled circular/non-serializable object:", err);
+                return "{}";
+            }
+        }
+
+        function safeClone(obj) {
+            if (!obj || typeof obj !== 'object') return obj;
+            try {
+                return JSON.parse(safeStringify(obj));
+            } catch (e) {
+                return Array.isArray(obj) ? [] : {};
+            }
+        }
+
         // --- State ---
         let activeTab = 'solver';
         let dictionary = [];
@@ -2112,7 +2224,7 @@
             try {
                 let repaired = 0;
                 for (let rawEntry of entries) {
-                    const beforeLen = JSON.stringify(rawEntry).length;
+                    const beforeLen = safeStringify(rawEntry).length;
                     const { entry: cleanEntry } = await sanitizeMonsterEntry(rawEntry);
                     if (cleanEntry.id) {
                         const docRef = db.collection('dictionary').doc(cleanEntry.id);
@@ -2125,7 +2237,7 @@
                             timestamp: Date.now()
                         });
                         repaired++;
-                        console.log(`Repaired oversized doc ${cleanEntry.id}: ${beforeLen} -> ${JSON.stringify(cleanEntry).length} bytes`);
+                        console.log(`Repaired oversized doc ${cleanEntry.id}: ${beforeLen} -> ${safeStringify(cleanEntry).length} bytes`);
                     }
                 }
                 if (repaired > 0) {
@@ -2144,7 +2256,7 @@
             try {
                 let repairedCount = 0;
                 for (let entry of dictionary) {
-                    const beforeLen = JSON.stringify(entry).length;
+                    const beforeLen = safeStringify(entry).length;
                     if (beforeLen > 50000 || entry.originalScreenshot || (entry.answers && entry.answers.length > 8)) {
                         const { entry: cleanEntry } = await sanitizeMonsterEntry(entry);
                         if (db && cleanEntry.id) {
@@ -2640,8 +2752,17 @@
                 if (isSavingHistory) return;
                 isSavingHistory = true;
                 try {
+                    const cleanList = (Array.isArray(historyList) ? historyList : []).map(h => ({
+                        id: String(h?.id || ''),
+                        user: String(h?.user || 'Anonymous'),
+                        result: String(h?.result || ''),
+                        duration: (typeof h?.duration === 'number' && !isNaN(h.duration)) ? h.duration : null,
+                        timestamp: typeof h?.timestamp === 'number' ? h.timestamp : Date.now(),
+                        targets: Array.isArray(h?.targets) ? h.targets.map(t => typeof t === 'string' ? t : (t?.data || '')) : [],
+                        answers: Array.isArray(h?.answers) ? h.answers.map(a => typeof a === 'string' ? a : (a?.data || '')) : []
+                    }));
                     await db.collection('config').doc('appSettings').set({
-                        solverHistory: historyList
+                        solverHistory: cleanList
                     }, { merge: true });
                 } catch (e) {
                     console.warn("Could not save solver history to Firebase:", e?.message || e);
@@ -2651,22 +2772,45 @@
             }, 300);
         }
 
-        // Automatically prune solver history: auto-clears when reaching 50 solves, or removes older than 24h
+        // Automatically prune solver history: keeps all details in cloud DB, but strips heavy circle images after 24h to save DB and local space
+        let hasPruningSyncPending = false;
         function pruneSolverHistory(list) {
             if (!Array.isArray(list)) return [];
             const oneDayAgo = Date.now() - (24 * 60 * 60 * 1000);
-            let filtered = list.filter(item => item && (item.timestamp || 0) >= oneDayAgo);
-            filtered.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+            let changed = false;
 
-            // When reaching 50 solves: Auto-clear all logs!
-            if (filtered.length >= 50) {
-                console.log("Solver history reached 50 solves limit — auto-clearing all logs...");
-                setTimeout(() => {
-                    showToast("Reached 50 solves limit: History auto-cleared in Firebase & site", "info", 3500);
-                }, 50);
-                return [];
+            // Retain up to 300 solves (lightweight text records take minimal space, ~30KB total)
+            let sorted = [...list].filter(Boolean);
+            sorted.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+            if (sorted.length > 300) {
+                sorted = sorted.slice(0, 300);
+                changed = true;
             }
-            return filtered;
+
+            // 24H Auto-Clear Rule:
+            // Keeps all solve logs & details, but clears heavy circle crop images after 24h
+            for (let item of sorted) {
+                const isOlderThan24h = (item.timestamp || 0) < oneDayAgo;
+                const hasTargets = Array.isArray(item.targets) && item.targets.length > 0;
+                const hasAnswers = Array.isArray(item.answers) && item.answers.length > 0;
+                if (isOlderThan24h && (hasTargets || hasAnswers)) {
+                    item.targets = [];
+                    item.answers = [];
+                    item.imagesPruned = true;
+                    changed = true;
+                }
+            }
+
+            // Automatically sync pruned history to Firebase database to keep local & cloud storage ultra lightweight
+            if (changed && db && !hasPruningSyncPending) {
+                hasPruningSyncPending = true;
+                setTimeout(() => {
+                    hasPruningSyncPending = false;
+                    saveHistoryToCloud(sorted);
+                }, 500);
+            }
+
+            return sorted;
         }
 
         // Compress circle crop image for history storage (keeps storage lightweight, ~500 bytes per crop)
@@ -2716,7 +2860,7 @@
                 const res = await fetch('/api/history', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ entry, history: solverHistory.slice(0, 50) })
+                    body: safeStringify({ entry, history: solverHistory.slice(0, 50) })
                 });
                 if (res.ok) {
                     const data = await res.json();
@@ -2773,7 +2917,8 @@
             const buttons = [
                 { id: 'btn-filter-all', key: 'all' },
                 { id: 'btn-filter-today', key: 'today' },
-                { id: 'btn-filter-7days', key: '7days' }
+                { id: 'btn-filter-7days', key: '7days' },
+                { id: 'btn-filter-images', key: 'images' }
             ];
             buttons.forEach(b => {
                 const el = document.getElementById(b.id);
@@ -2868,11 +3013,15 @@
                     if ((item.user || '').toLowerCase() !== selectedUser.toLowerCase()) return false;
                 }
 
-                // Date filter
+                // Date & Image filter
                 if (historyDateFilter === 'today') {
                     if ((item.timestamp || 0) < startOfTodayMs) return false;
                 } else if (historyDateFilter === '7days') {
                     if ((item.timestamp || 0) < sevenDaysAgoMs) return false;
+                } else if (historyDateFilter === 'images') {
+                    const hasImgs = (Array.isArray(item.targets) && item.targets.length > 0) ||
+                                    (Array.isArray(item.answers) && item.answers.length > 0);
+                    if (!hasImgs) return false;
                 }
 
                 return true;
@@ -3035,7 +3184,17 @@
                                     ${answersHtml}
                                 </div>
                             </div>` : ''}
-                        </div>` : ''}
+                        </div>` : `
+                        <div style="background:#141416; border:1px solid rgba(255,255,255,0.06); border-radius:6px; padding:8px 12px; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px;">
+                            <span style="font-size:11px; color:#888; display:inline-flex; align-items:center; gap:5px;">
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                                Circle images cleared (&gt;24h) • Text details retained in DB
+                            </span>
+                            <span style="font-size:11px; font-weight:700; color:var(--accent); font-family:monospace;">
+                                T1→A${safeResult.charAt(0) || '?'} • T2→A${safeResult.charAt(1) || '?'} • T3→A${safeResult.charAt(2) || '?'}
+                            </span>
+                        </div>
+                        `}
                     </div>`;
             }).join('');
         }
@@ -3059,43 +3218,103 @@
 
         function updateHistoryAnalytics() {
             const totalSolvesEl = document.getElementById('analytics-total-solves');
+            const activeImagesEl = document.getElementById('analytics-active-images');
             const avgTimeEl = document.getElementById('analytics-avg-time');
             const fastestTimeEl = document.getElementById('analytics-fastest-time');
+            const blitzRateEl = document.getElementById('analytics-blitz-rate');
             const topUserEl = document.getElementById('analytics-top-user');
+            const spaceSavedEl = document.getElementById('analytics-space-saved');
+            const freqBarsEl = document.getElementById('analytics-frequency-bars');
+
+            // Predictor elements
+            const predConfidenceEl = document.getElementById('predict-confidence-badge');
+            const predCombinationEl = document.getElementById('predict-combination');
+            const predHotEl = document.getElementById('predict-hot-digits');
+            const predColdEl = document.getElementById('predict-cold-digits');
+            const predRepeatEl = document.getElementById('predict-repeat-rate');
 
             if (!totalSolvesEl) return;
 
-            const total = Array.isArray(solverHistory) ? solverHistory.length : 0;
-            totalSolvesEl.innerText = `${total} / 50`;
+            const list = Array.isArray(solverHistory) ? solverHistory : [];
+            totalSolvesEl.innerText = `${list.length}`;
 
+            let imagesKeptCount = 0;
+            let imagesClearedCount = 0;
             const durations = [];
             const userCounts = {};
+            let blitzCount = 0;
 
-            if (Array.isArray(solverHistory)) {
-                solverHistory.forEach(item => {
-                    if (item) {
-                        const dur = Number(item.duration);
-                        if (!isNaN(dur) && dur > 0) {
-                            durations.push(dur);
+            const digitCounts = { '1': 0, '2': 0, '3': 0, '4': 0 };
+            const posCounts = [{}, {}, {}];
+            const recentSolves = [];
+            let repeatsInSolveCount = 0;
+
+            list.forEach(item => {
+                if (!item) return;
+                const hasImgs = (Array.isArray(item.targets) && item.targets.length > 0) ||
+                                (Array.isArray(item.answers) && item.answers.length > 0);
+                if (hasImgs) {
+                    imagesKeptCount++;
+                } else {
+                    imagesClearedCount++;
+                }
+
+                const dur = Number(item.duration);
+                if (!isNaN(dur) && dur > 0) {
+                    durations.push(dur);
+                    if (dur < 3.0) blitzCount++;
+                }
+
+                const u = (item.user || 'Anonymous').trim() || 'Anonymous';
+                userCounts[u] = (userCounts[u] || 0) + 1;
+
+                const res = String(item.result || '').replace(/[^1-9]/g, '');
+                if (res.length >= 3) {
+                    recentSolves.push(res);
+                    for (let pos = 0; pos < 3; pos++) {
+                        const digit = res.charAt(pos);
+                        if (digitCounts[digit] !== undefined) {
+                            digitCounts[digit]++;
+                        } else {
+                            digitCounts[digit] = 1;
                         }
-                        const u = (item.user || 'Anonymous').trim() || 'Anonymous';
-                        userCounts[u] = (userCounts[u] || 0) + 1;
+                        posCounts[pos][digit] = (posCounts[pos][digit] || 0) + 1;
                     }
-                });
+                    if (res.charAt(0) === res.charAt(1) || res.charAt(1) === res.charAt(2) || res.charAt(0) === res.charAt(2)) {
+                        repeatsInSolveCount++;
+                    }
+                }
+            });
+
+            if (activeImagesEl) activeImagesEl.innerText = `${imagesKeptCount} <24h`;
+
+            // Space saved calculation: roughly 38KB per set of 7 circle crops
+            const approxBytesSaved = imagesClearedCount * 38000;
+            if (spaceSavedEl) {
+                if (approxBytesSaved > 1048576) {
+                    spaceSavedEl.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> ${(approxBytesSaved / 1048576).toFixed(1)} MB saved by 24h prune`;
+                } else if (approxBytesSaved > 1024) {
+                    spaceSavedEl.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> ${Math.round(approxBytesSaved / 1024)} KB saved by 24h prune`;
+                } else {
+                    spaceSavedEl.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Space optimized (DB active)`;
+                }
             }
 
+            // Durations
             if (durations.length > 0) {
                 const sum = durations.reduce((acc, v) => acc + v, 0);
                 const avg = sum / durations.length;
                 const fastest = Math.min(...durations);
-
                 if (avgTimeEl) avgTimeEl.innerText = formatDuration(avg);
                 if (fastestTimeEl) fastestTimeEl.innerText = formatDuration(fastest);
+                if (blitzRateEl) blitzRateEl.innerText = `${Math.round((blitzCount / durations.length) * 100)}%`;
             } else {
                 if (avgTimeEl) avgTimeEl.innerText = '—';
                 if (fastestTimeEl) fastestTimeEl.innerText = '—';
+                if (blitzRateEl) blitzRateEl.innerText = '—';
             }
 
+            // Top user
             let topUser = '—';
             let maxCount = 0;
             for (const [u, cnt] of Object.entries(userCounts)) {
@@ -3106,7 +3325,207 @@
             }
             if (topUserEl) {
                 topUserEl.innerText = topUser;
-                topUserEl.title = topUser !== '—' ? `Most active user: ${topUser}` : 'No solves recorded yet';
+                topUserEl.title = topUser !== '—' ? `Most active solver: ${topUser}` : 'No solves recorded yet';
+            }
+
+            // Answer choice distribution cards (A1 to A4)
+            if (freqBarsEl) {
+                const totalDigits = Object.values(digitCounts).reduce((a, b) => a + b, 0);
+                const choices = ['1', '2', '3', '4'];
+                freqBarsEl.innerHTML = choices.map(c => {
+                    const count = digitCounts[c] || 0;
+                    const pct = totalDigits > 0 ? Math.round((count / totalDigits) * 100) : 0;
+                    return `
+                        <div style="background:#1e1e1e; border:1px solid rgba(255,255,255,0.06); border-radius:6px; padding:6px 8px; text-align:center;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; font-size:11px; margin-bottom:4px;">
+                                <span style="font-weight:700; color:var(--accent);">A${c}</span>
+                                <span style="color:#aaa; font-family:monospace; font-size:10px;">${count} (${pct}%)</span>
+                            </div>
+                            <div style="background:#2a2a2a; border-radius:3px; height:6px; overflow:hidden;">
+                                <div style="background:linear-gradient(90deg, var(--accent), var(--success)); height:100%; width:${pct}%; transition:width 0.4s ease;"></div>
+                            </div>
+                        </div>`;
+                }).join('');
+            }
+
+            // Next Quiz Arrival & Spawn Predictor calculation
+            updateNextQuizArrivalPrediction();
+        }
+
+        function formatRelativeMinutes(ms) {
+            const totalSecs = Math.round(Math.abs(ms) / 1000);
+            const m = Math.floor(totalSecs / 60);
+            const s = totalSecs % 60;
+            return `${m}m ${s < 10 ? '0' : ''}${s}s`;
+        }
+
+        function updateNextQuizArrivalPrediction() {
+            const badgeEl = document.getElementById('quiz-spawn-status-badge');
+            const timeEl = document.getElementById('quiz-predicted-time');
+            const windowEl = document.getElementById('quiz-predicted-window');
+            const countdownEl = document.getElementById('quiz-countdown-timer');
+            const confEl = document.getElementById('quiz-confidence-text');
+            const avgIntervalEl = document.getElementById('quiz-avg-interval');
+            const lastTimeEl = document.getElementById('quiz-last-time');
+            const regularityEl = document.getElementById('quiz-regularity');
+
+            if (!badgeEl || !timeEl) return;
+
+            const list = Array.isArray(solverHistory) ? solverHistory : [];
+            const sorted = list
+                .filter(item => item && typeof item.timestamp === 'number' && item.timestamp > 0)
+                .sort((a, b) => a.timestamp - b.timestamp);
+
+            if (sorted.length === 0) {
+                badgeEl.innerText = "Waiting for data";
+                badgeEl.style.color = "#71717a";
+                badgeEl.style.borderColor = "#3f3f46";
+                badgeEl.style.background = "rgba(255,255,255,0.05)";
+                timeEl.innerHTML = `<span>—:— PHT</span>`;
+                windowEl.innerText = "Solve quizzes to begin predicting arrival times";
+                countdownEl.innerText = "--:--";
+                countdownEl.style.color = "#71717a";
+                confEl.innerText = "Confidence: —";
+                if (avgIntervalEl) avgIntervalEl.innerText = "—";
+                if (lastTimeEl) lastTimeEl.innerText = "—";
+                if (regularityEl) regularityEl.innerText = "—";
+                return;
+            }
+
+            const lastSolve = sorted[sorted.length - 1];
+            const lastTime = lastSolve.timestamp;
+            const msSinceLast = Date.now() - lastTime;
+            const lastFormatted = formatPhilippineTime(lastTime);
+            const lastClock = lastFormatted.includes(',') ? lastFormatted.split(',')[1].trim() : lastFormatted;
+
+            if (lastTimeEl) {
+                lastTimeEl.innerText = `${formatRelativeMinutes(msSinceLast)} ago (${lastClock})`;
+            }
+
+            if (sorted.length < 2) {
+                badgeEl.innerText = "Need 2+ solves";
+                badgeEl.style.color = "#38bdf8";
+                badgeEl.style.borderColor = "rgba(56,189,248,0.3)";
+                badgeEl.style.background = "rgba(56,189,248,0.1)";
+                timeEl.innerHTML = `<span>Awaiting 2nd solve</span>`;
+                windowEl.innerText = "Need 1 more solve to calculate quiz spawn intervals";
+                countdownEl.innerText = "Need Data";
+                countdownEl.style.color = "#38bdf8";
+                confEl.innerText = "Confidence: Baseline setup";
+                if (avgIntervalEl) avgIntervalEl.innerText = "Need 2nd solve";
+                if (regularityEl) regularityEl.innerText = "Initial solve";
+                return;
+            }
+
+            // Calculate intervals between consecutive solves
+            const intervals = [];
+            for (let i = 1; i < sorted.length; i++) {
+                const gapMs = sorted[i].timestamp - sorted[i - 1].timestamp;
+                const gapMins = gapMs / (60 * 1000);
+                // Exclude multi-hour inactive periods (> 120 mins) and duplicate instant solves (< 45s)
+                if (gapMins >= 1 && gapMins <= 120) {
+                    intervals.push(gapMs);
+                }
+            }
+
+            // Fallback if all solves were spaced farther apart
+            if (intervals.length === 0) {
+                for (let i = 1; i < sorted.length; i++) {
+                    const gapMs = sorted[i].timestamp - sorted[i - 1].timestamp;
+                    if (gapMs >= 30000) intervals.push(gapMs);
+                }
+            }
+
+            if (intervals.length === 0) {
+                badgeEl.innerText = "Irregular breaks";
+                timeEl.innerHTML = `<span>Session paused</span>`;
+                windowEl.innerText = "Gaps between recorded solves are over 2 hours apart";
+                countdownEl.innerText = "Paused";
+                countdownEl.style.color = "#f59e0b";
+                return;
+            }
+
+            // Calculate median and recent weighted interval
+            const sortedIntervals = [...intervals].sort((a, b) => a - b);
+            const mid = Math.floor(sortedIntervals.length / 2);
+            const medianIntervalMs = sortedIntervals.length % 2 !== 0
+                ? sortedIntervals[mid]
+                : (sortedIntervals[mid - 1] + sortedIntervals[mid]) / 2;
+
+            const recentSample = intervals.slice(-4);
+            const recentAvgMs = recentSample.reduce((a, b) => a + b, 0) / recentSample.length;
+            const expectedIntervalMs = Math.round((medianIntervalMs * 0.4) + (recentAvgMs * 0.6));
+
+            if (avgIntervalEl) {
+                avgIntervalEl.innerText = `~${formatRelativeMinutes(expectedIntervalMs)}`;
+            }
+
+            // Measure regularity / variance
+            const variance = intervals.reduce((acc, v) => acc + Math.pow(v - expectedIntervalMs, 2), 0) / intervals.length;
+            const stdDevMs = Math.sqrt(variance);
+            const stdDevMins = (stdDevMs / (60 * 1000)).toFixed(1);
+
+            const ratio = Math.min(1, stdDevMs / expectedIntervalMs);
+            const confidenceScore = Math.round(Math.max(50, Math.min(96, (1 - (ratio * 0.65)) * 100)));
+
+            if (regularityEl) {
+                regularityEl.innerText = confidenceScore >= 80 
+                    ? `High (±${Math.round(stdDevMs / 1000)}s)`
+                    : (confidenceScore >= 65 ? `Moderate (±${stdDevMins}m)` : `Dynamic (±${stdDevMins}m)`);
+            }
+
+            const predictedArrivalMs = lastTime + expectedIntervalMs;
+            const msRemaining = predictedArrivalMs - Date.now();
+
+            const winStartMs = Math.max(lastTime, predictedArrivalMs - Math.max(45000, stdDevMs * 0.65));
+            const winEndMs = predictedArrivalMs + Math.max(45000, stdDevMs * 0.65);
+
+            const arrivalTimePht = formatPhilippineTime(predictedArrivalMs);
+            const arrivalClockStr = arrivalTimePht.includes(',') ? arrivalTimePht.split(',')[1].trim() : arrivalTimePht;
+            const winStartFormatted = formatPhilippineTime(winStartMs);
+            const winStartStr = winStartFormatted.includes(',') ? winStartFormatted.split(',')[1].trim() : winStartFormatted;
+            const winEndFormatted = formatPhilippineTime(winEndMs);
+            const winEndStr = winEndFormatted.includes(',') ? winEndFormatted.split(',')[1].trim() : winEndFormatted;
+
+            timeEl.innerHTML = `<span>~${arrivalClockStr || 'Soon'}</span>`;
+            windowEl.innerText = `Expected window: ${winStartStr} – ${winEndStr}`;
+            confEl.innerText = `Confidence: ${confidenceScore}% (${intervals.length} intervals analyzed)`;
+
+            if (msRemaining > 0) {
+                // Countdown active
+                const totalSec = Math.floor(msRemaining / 1000);
+                const m = Math.floor(totalSec / 60);
+                const s = totalSec % 60;
+                const cdStr = `${m}m ${s < 10 ? '0' : ''}${s}s`;
+
+                countdownEl.innerText = cdStr;
+                countdownEl.style.color = "#4ade80"; // Bright green
+
+                if (msRemaining <= 90000) {
+                    badgeEl.innerText = "⚡ Spawning Very Soon";
+                    badgeEl.style.color = "#f59e0b";
+                    badgeEl.style.borderColor = "rgba(245,158,11,0.5)";
+                    badgeEl.style.background = "rgba(245,158,11,0.15)";
+                } else {
+                    badgeEl.innerText = `⏳ In ~${cdStr}`;
+                    badgeEl.style.color = "#38bdf8";
+                    badgeEl.style.borderColor = "rgba(56,189,248,0.3)";
+                    badgeEl.style.background = "rgba(56,189,248,0.1)";
+                }
+            } else {
+                // Overdue / window open
+                const overdueSec = Math.floor(Math.abs(msRemaining) / 1000);
+                const om = Math.floor(overdueSec / 60);
+                const os = overdueSec % 60;
+                const overdueStr = `${om}m ${os < 10 ? '0' : ''}${os}s`;
+
+                countdownEl.innerText = "DUE NOW!";
+                countdownEl.style.color = "#f43f5e"; // Rose / bright red alert
+
+                badgeEl.innerText = `🚨 DUE ANY SECOND! (+${overdueStr})`;
+                badgeEl.style.color = "#f43f5e";
+                badgeEl.style.borderColor = "rgba(244,63,94,0.6)";
+                badgeEl.style.background = "rgba(244,63,94,0.18)";
             }
         }
 
@@ -3120,40 +3539,45 @@
             if (!countdownEl) return;
 
             if (!Array.isArray(solverHistory) || solverHistory.length === 0) {
-                if (badgeEl) badgeEl.innerText = '⏳ Reset: Inactive';
-                countdownEl.innerText = 'No active timer (24h retention)';
-                if (infoEl) infoEl.innerText = '24h rolling reset • Auto-clears at 50';
+                if (badgeEl) badgeEl.innerText = '📷 24h Prune: Active';
+                countdownEl.innerText = 'No solves recorded yet (24h image pruning rule active)';
+                if (infoEl) infoEl.innerText = 'Keeps full logs in DB • Clears circle images after 24h to save DB space';
                 return;
             }
 
-            if (solverHistory.length >= 50) {
-                if (badgeEl) badgeEl.innerText = '⚠️ Auto-Reset Pending';
-                countdownEl.innerText = 'Capacity reached (50/50)! Clears on next solve';
-                if (infoEl) infoEl.innerText = 'Max 50 limit reached • Next solve will clear history';
-                return;
-            }
+            // Find the oldest record that STILL has circle images
+            let oldestWithImages = null;
+            let imagesClearedCount = 0;
+            let withImagesCount = 0;
 
-            let oldestTimestamp = null;
             solverHistory.forEach(item => {
-                if (item && item.timestamp) {
-                    if (oldestTimestamp === null || item.timestamp < oldestTimestamp) {
-                        oldestTimestamp = item.timestamp;
+                if (item) {
+                    const hasImgs = (Array.isArray(item.targets) && item.targets.length > 0) ||
+                                    (Array.isArray(item.answers) && item.answers.length > 0);
+                    if (hasImgs && item.timestamp) {
+                        withImagesCount++;
+                        if (oldestWithImages === null || item.timestamp < oldestWithImages.timestamp) {
+                            oldestWithImages = item;
+                        }
+                    } else {
+                        imagesClearedCount++;
                     }
                 }
             });
 
-            if (!oldestTimestamp) {
-                if (badgeEl) badgeEl.innerText = '⏳ Reset: Inactive';
-                countdownEl.innerText = 'No active timer';
+            if (!oldestWithImages) {
+                if (badgeEl) badgeEl.innerText = '💾 Space Optimized';
+                countdownEl.innerText = `All historical images pruned (${imagesClearedCount} log${imagesClearedCount === 1 ? '' : 's'} preserved in DB)`;
+                if (infoEl) infoEl.innerText = 'Circle images cleared for >24h logs • Details preserved forever in DB';
                 return;
             }
 
-            const expiryTime = oldestTimestamp + (24 * 60 * 60 * 1000);
+            const expiryTime = oldestWithImages.timestamp + (24 * 60 * 60 * 1000);
             const msRemaining = expiryTime - Date.now();
 
             if (msRemaining <= 0) {
-                if (badgeEl) badgeEl.innerText = '⏳ Pruning now...';
-                countdownEl.innerText = 'Oldest log expired • Pruning now...';
+                if (badgeEl) badgeEl.innerText = '⏳ Pruning images...';
+                countdownEl.innerText = '24h threshold reached • Pruning circle images now...';
                 solverHistory = pruneSolverHistory(solverHistory);
                 renderSolverHistory();
                 saveHistoryToCloud(solverHistory);
@@ -3163,12 +3587,11 @@
             const hours = Math.floor(msRemaining / (3600 * 1000));
             const minutes = Math.floor((msRemaining % (3600 * 1000)) / (60 * 1000));
             const seconds = Math.floor((msRemaining % (60 * 1000)) / 1000);
-
             const timeStr = `${hours}h ${minutes < 10 ? '0' : ''}${minutes}m ${seconds < 10 ? '0' : ''}${seconds}s`;
 
-            if (badgeEl) badgeEl.innerText = `⏳ Reset: ${timeStr}`;
-            countdownEl.innerText = `${timeStr} (Oldest log)`;
-            if (infoEl) infoEl.innerText = `Oldest record auto-clears in ${timeStr} • Max 50`;
+            if (badgeEl) badgeEl.innerText = `⏳ Next Prune: ${timeStr}`;
+            countdownEl.innerText = `Next circle images cleared in ${timeStr} (${withImagesCount} active, ${imagesClearedCount} text-archived)`;
+            if (infoEl) infoEl.innerText = 'Keeps full solve logs in DB • Auto-clears heavy circle images after 24h';
         }
 
         function startHistoryResetTicker() {
@@ -3176,6 +3599,7 @@
             historyResetTicker = setInterval(() => {
                 if (activeTab === 'history') {
                     updateHistoryResetTimer();
+                    updateNextQuizArrivalPrediction();
                 }
             }, 1000);
         }
@@ -3185,6 +3609,7 @@
             updateHistoryUserFilterOptions();
             updateHistoryAnalytics();
             updateHistoryResetTimer();
+            updateNextQuizArrivalPrediction();
             applyHistoryFiltersAndSort();
         }
 
@@ -3292,7 +3717,7 @@
                     await fetch('/api/history', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ history: solverHistory })
+                        body: safeStringify({ history: solverHistory })
                     });
                 }
             } catch (e) {}
@@ -3412,27 +3837,47 @@
                     const bloatedDocsToPrune = [];
                     snapshot.forEach(doc => {
                         if (doc.id === 'v1_data') return;
-                        const entry = doc.data();
-                        entry.id = doc.id;
+                        const raw = doc.data() || {};
+                        const entry = {
+                            id: doc.id,
+                            name: typeof raw.name === 'string' ? raw.name : 'Unnamed Monster',
+                            targetImage: (typeof raw.targetImage === 'string' && raw.targetImage) ? raw.targetImage : (typeof raw.target === 'string' ? raw.target : ''),
+                            targetHash: typeof raw.targetHash === 'string' ? raw.targetHash : '',
+                            targetPosition: (raw.targetPosition && typeof raw.targetPosition === 'object' && !raw.targetPosition._delegate) ? {
+                                x: Number(raw.targetPosition.x) || 0,
+                                y: Number(raw.targetPosition.y) || 0,
+                                radius: Number(raw.targetPosition.radius) || 28
+                            } : null,
+                            answers: Array.isArray(raw.answers) ? raw.answers.map(a => {
+                                if (typeof a === 'string') return { data: a, hash: '' };
+                                if (a && typeof a === 'object') {
+                                    return {
+                                        data: typeof a.data === 'string' ? a.data : '',
+                                        hash: typeof a.hash === 'string' ? a.hash : '',
+                                        position: (a.position && typeof a.position === 'object') ? {
+                                            type: String(a.position.type || 'answer'),
+                                            index: Number(a.position.index) || 0
+                                        } : undefined
+                                    };
+                                }
+                                return { data: '', hash: '' };
+                            }) : [],
+                            timestamp: typeof raw.timestamp === 'number' ? raw.timestamp : Date.now()
+                        };
                         // Check if document contains legacy full screenshot that pushes it toward the 1MB Firestore limit
-                        if (entry.originalScreenshot) {
+                        if (raw.originalScreenshot) {
                             bloatedDocsToPrune.push(doc.ref);
-                            delete entry.originalScreenshot;
                         }
-                        if (entry.target && !entry.targetImage) entry.targetImage = entry.target;
-                        if (entry.answers) {
-                            entry.answers = entry.answers.map(a => typeof a === 'string' ? { data: a, hash: '' } : a);
-                        } else entry.answers = [];
                         newDict.push(entry);
                     });
                     dictionary = newDict;
                     renderDictionary();
                     try {
-                        localStorage.setItem('dictionary_cache', JSON.stringify({ version: 1, entries: dictionary, updatedAt: Date.now() }));
+                        localStorage.setItem('dictionary_cache', safeStringify({ version: 1, entries: dictionary, updatedAt: Date.now() }));
                     } catch (e) {}
 
                     // Automatically repair oversized entries (over 200KB or has legacy originalScreenshot) - only once per doc
-                    const oversized = newDict.filter(e => e.id && !repairedDocIdsSet.has(e.id) && (JSON.stringify(e).length > 200000 || e.originalScreenshot));
+                    const oversized = newDict.filter(e => e.id && !repairedDocIdsSet.has(e.id) && (safeStringify(e).length > 200000 || e.originalScreenshot));
                     if (oversized.length > 0) {
                         oversized.forEach(e => repairedDocIdsSet.add(e.id));
                         repairOversizedEntries(oversized);
@@ -3561,7 +4006,7 @@
                             if (rec && rec.id) screenshotAuditMap.set(rec.id, rec);
                         });
                         try {
-                            localStorage.setItem('screenshot_audit_cache', JSON.stringify(Array.from(screenshotAuditMap.values())));
+                            localStorage.setItem('screenshot_audit_cache', safeStringify(Array.from(screenshotAuditMap.values())));
                         } catch (e) {}
                     }
                 });
@@ -3573,7 +4018,7 @@
                         const keys = doc.data().keys || [];
                         ignoredDuplicatePairsSet = new Set(keys);
                         try {
-                            localStorage.setItem('ignored_duplicate_pairs', JSON.stringify(keys));
+                            localStorage.setItem('ignored_duplicate_pairs', safeStringify(keys));
                         } catch (e) {}
                         updateDuplicatesBadge();
                         const p = document.getElementById('duplicates-panel');
@@ -5469,7 +5914,7 @@ Example: 132`;
                     };
                     screenshotAuditMap.set(auditRecord.id, auditRecord);
                     try {
-                        localStorage.setItem('screenshot_audit_cache', JSON.stringify(Array.from(screenshotAuditMap.values())));
+                        localStorage.setItem('screenshot_audit_cache', safeStringify(Array.from(screenshotAuditMap.values())));
                     } catch (e) {}
 
                     scheduleAuditSync();
@@ -5723,7 +6168,7 @@ Example: 132`;
             ignoredDuplicatePairsSet.add(pairKey);
             const keysArray = Array.from(ignoredDuplicatePairsSet);
             try {
-                localStorage.setItem('ignored_duplicate_pairs', JSON.stringify(keysArray));
+                localStorage.setItem('ignored_duplicate_pairs', safeStringify(keysArray));
             } catch (e) {}
 
             updateDuplicatesBadge();
@@ -5956,7 +6401,7 @@ Example: 132`;
         async function saveDictionaryToStorage() {
             if (!Array.isArray(dictionary)) dictionary = [];
             try {
-                localStorage.setItem('dictionary_cache', JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), entries: dictionary }));
+                localStorage.setItem('dictionary_cache', safeStringify({ version: 1, exportedAt: new Date().toISOString(), entries: dictionary }));
             } catch (e) { console.error("Local storage save failed:", e); }
             renderDictionary();
         }
@@ -5964,7 +6409,7 @@ Example: 132`;
         async function saveScreenshot(base64DataUrl) {
             screenshots.unshift({ data: base64DataUrl, timestamp: Date.now() });
             screenshots = screenshots.slice(0, 20);
-            try { localStorage.setItem('screenshots_local', JSON.stringify(screenshots)); } catch (e) {}
+            try { localStorage.setItem('screenshots_local', safeStringify(screenshots)); } catch (e) {}
             renderStorage();
         }
 
@@ -5996,7 +6441,7 @@ Example: 132`;
 
         function deleteLocalScreenshot(i) {
             screenshots.splice(i, 1);
-            try { localStorage.setItem('screenshots_local', JSON.stringify(screenshots)); } catch (e) {}
+            try { localStorage.setItem('screenshots_local', safeStringify(screenshots)); } catch (e) {}
             renderStorage();
         }
 
@@ -6181,20 +6626,28 @@ Example: 132`;
                     }
 
                     if (bestSim > 0) {
-                        candidates.push({ entry, similarity: bestSim });
+                        candidates.push({
+                            entry: {
+                                id: String(entry.id || ''),
+                                name: String(entry.name || 'Unnamed Monster'),
+                                targetImage: String(entry.targetImage || entry.target || '')
+                            },
+                            similarity: Math.round(bestSim * 10) / 10
+                        });
                     }
                 }
 
                 candidates.sort((a, b) => b.similarity - a.similarity);
+                const trimmedCandidates = candidates.slice(0, 15);
 
                 // Smart Dict threshold: >= 48 is considered a valid match candidate
-                const top = candidates[0];
+                const top = trimmedCandidates[0];
                 const isMatch = top && top.similarity >= 48;
 
                 return {
                     monster: isMatch ? top.entry : null,
                     sim: top?.similarity || 0,
-                    candidates,
+                    candidates: trimmedCandidates,
                     primaryHash: answerFeatures.primaryHash
                 };
             } catch (err) {
@@ -6657,7 +7110,7 @@ Example: 132`;
                     };
                     screenshotAuditMap.set(item.sig.id, auditRecord);
                     try {
-                        localStorage.setItem('screenshot_audit_cache', JSON.stringify(Array.from(screenshotAuditMap.entries()).slice(-200)));
+                        localStorage.setItem('screenshot_audit_cache', safeStringify(Array.from(screenshotAuditMap.entries()).slice(-200)));
                     } catch (e) {}
                     scheduleAuditSync();
                 }
@@ -6758,7 +7211,7 @@ Example: 132`;
             // Clone draft for editing
             batchEditDraft = {
                 dataUrl: item.dataUrl,
-                answerCrops: JSON.parse(JSON.stringify(item.answerCrops)),
+                answerCrops: safeClone(item.answerCrops),
                 targetCrops: item.targetCrops
             };
 
@@ -6968,7 +7421,7 @@ Example: 132`;
             const item = batchQueue[activeBatchEditingIndex];
             if (!item) return;
 
-            item.answerCrops = JSON.parse(JSON.stringify(batchEditDraft.answerCrops));
+            item.answerCrops = safeClone(batchEditDraft.answerCrops);
 
             closeBatchEditModal();
             renderBatchCards();
