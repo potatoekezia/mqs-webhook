@@ -1267,13 +1267,46 @@
         </div>
 
         <div class="card">
-            <h3>Gemini API Key Pool</h3>
-            <div id="gemini-key-list" style="margin-bottom:10px"></div>
-            <div style="display:flex; gap:8px">
-                <input type="password" id="new-gemini-key" placeholder="Add new API Key" style="margin-bottom:0">
-                <button class="btn" style="width:auto; margin-bottom:0" onclick="addGeminiKey()">Add</button>
+            <div style="margin-bottom:12px;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; flex-wrap:wrap; gap:8px;">
+                    <h3 style="margin:0; display:flex; align-items:center; gap:8px;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2"><path d="m21 2-2 2m-6 6 7-7 2 2-7 7m-1.5 1.5-2.5 2.5a2.12 2.12 0 0 1-3 0l-4.5-4.5a2.12 2.12 0 0 1 0-3l2.5-2.5"/><circle cx="7.5" cy="16.5" r="1.5"/></svg>
+                        Gemini API Key Pool
+                    </h3>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span id="gemini-pool-rpm-badge" style="font-size:11px; font-weight:bold; color:#4ade80; background:rgba(74,222,128,0.12); border:1px solid rgba(74,222,128,0.25); padding:3px 10px; border-radius:12px; white-space:nowrap;">
+                            0 / 0 RPM Available
+                        </span>
+                        <button class="btn btn-secondary" style="width:auto; padding:4px 10px; margin:0; font-size:11px;" onclick="testAllGeminiKeys(this)" title="Test all keys in pool">Test All</button>
+                    </div>
+                </div>
+                <!-- Dynamic Pool Capacity Dashboard -->
+                <div id="gemini-pool-summary" style="background:#1a1a20; border:1px solid rgba(187,134,252,0.2); border-radius:8px; padding:10px 12px;">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px; flex-wrap:wrap; gap:4px;">
+                        <span style="font-size:12px; font-weight:700; color:var(--accent); display:inline-flex; align-items:center; gap:6px;">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                            Total Pool Rate Capacity: <span id="pool-total-rpm-text" style="color:#4ade80;">0 req/min</span>
+                        </span>
+                        <span id="pool-remaining-now-text" style="font-size:11px; color:#38bdf8; font-weight:600;">0 solves available now</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; font-size:11px; color:#94a3b8; margin-top:4px; flex-wrap:wrap; gap:4px;">
+                        <span id="pool-active-count-text">0 active keys (~15 RPM each)</span>
+                        <span style="color:#a78bfa; font-weight:500;">Rotator: Least-Loaded Round-Robin (Active)</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px; padding-top:6px; border-top:1px solid rgba(255,255,255,0.06); font-size:11px; flex-wrap:wrap; gap:4px;">
+                        <span style="color:#e2e8f0; font-weight:600; display:inline-flex; align-items:center; gap:5px;">
+                            <span style="color:var(--success);">⚡</span> Total AI Solves (Cloud-Synced): <strong id="pool-cloud-solves-text" style="color:#a78bfa;">0 solves</strong>
+                        </span>
+                        <span style="color:#38bdf8; font-size:10px; font-weight:500;">Synced across all ~20 users</span>
+                    </div>
+                </div>
             </div>
-            <p style="font-size:12px; color:var(--text-secondary); margin-top:8px">Keys are stored in Firebase and rotated automatically.</p>
+            <div id="gemini-key-list" style="margin-bottom:12px"></div>
+            <div style="display:flex; gap:8px">
+                <input type="password" id="new-gemini-key" placeholder="Paste Gemini API Key (AIza...)" style="margin-bottom:0; flex:1;" onkeydown="if(event.key==='Enter') addGeminiKey()">
+                <button class="btn" id="btn-add-gemini-key" style="width:auto; margin-bottom:0; min-width:80px; white-space:nowrap;" onclick="addGeminiKey()">Add</button>
+            </div>
+            <p style="font-size:12px; color:var(--text-secondary); margin-top:8px; margin-bottom:0;">Keys are verified before adding, load-balanced automatically across the pool, and protected from 429 quota exhaustion.</p>
         </div>
 
         <div class="card" style="margin-bottom:16px;">
@@ -1789,6 +1822,10 @@
         let db = null;
         let storage = null;
         let geminiKeys = [];
+        try {
+            const cachedKeys = localStorage.getItem('local_gemini_keys');
+            if (cachedKeys) geminiKeys = JSON.parse(cachedKeys) || [];
+        } catch (e) {}
         let screenshotAuditMap = new Map(); // key: hash, value: { fileName, monsterName, timestamp, fileSize }
         let pendingAuditScreenshotData = null;
         let ignoredDuplicatePairsSet = new Set(); // Stores ignored pair identifiers so false positives are hidden
@@ -1915,10 +1952,15 @@
                     pushHistoryToServer();
                 }
                 fetchSharedHistoryFromServer();
+                fetchGeminiStatsFromServer();
                 setInterval(() => {
                     if (!db) fetchSharedHistoryFromServer();
+                    fetchGeminiStatsFromServer();
                 }, 20000);
-                window.addEventListener('focus', fetchSharedHistoryFromServer);
+                window.addEventListener('focus', () => {
+                    fetchSharedHistoryFromServer();
+                    fetchGeminiStatsFromServer();
+                });
                 setTimeout(() => deduplicateDictionary(), 2000);
             } catch (err) {
                 console.error("Error during application initialization:", err);
@@ -2959,7 +3001,7 @@
             }
         }
 
-        async function recordSolverHistory(resultDigits, targetCrops = [], answerCrops = [], duration = null) {
+        async function recordSolverHistory(resultDigits, targetCrops = [], answerCrops = [], duration = null, source = null) {
             if (!resultDigits || resultDigits === "000") return;
             const currentUser = getSolverUserName();
             const entry = {
@@ -2967,6 +3009,7 @@
                 user: currentUser,
                 result: String(resultDigits),
                 duration: (typeof duration === 'number' && !isNaN(duration)) ? Math.round(duration * 10) / 10 : (duration || null),
+                source: source || 'pHash',
                 timestamp: Date.now(),
                 targets: Array.isArray(targetCrops) ? targetCrops : [],
                 answers: Array.isArray(answerCrops) ? answerCrops : []
@@ -3242,6 +3285,7 @@
                             </div>
 
                             <div style="display:flex; align-items:center; gap:8px; flex-shrink:0">
+                                ${item.source ? `<span style="font-size:10px; font-weight:700; padding:2px 7px; border-radius:4px; ${String(item.source).toLowerCase().includes('gemini') ? 'background:rgba(187,134,252,0.15); color:var(--accent); border:1px solid rgba(187,134,252,0.3);' : (String(item.source).toLowerCase().includes('hybrid') ? 'background:rgba(56,189,248,0.15); color:#38bdf8; border:1px solid rgba(56,189,248,0.3);' : 'background:rgba(74,222,128,0.12); color:#4ade80; border:1px solid rgba(74,222,128,0.25);')}" title="Engine: ${escapeHtml(item.source)}">${escapeHtml(item.source.replace('Solved via ', ''))}</span>` : ''}
                                 <div style="background:rgba(3,218,198,0.12); border:1px solid rgba(3,218,198,0.4); padding:4px 12px; border-radius:6px; font-size:18px; font-weight:800; letter-spacing:3px; color:var(--success); font-family:monospace; box-shadow:0 2px 6px rgba(0,0,0,0.2)">
                                     ${safeResult}
                                 </div>
@@ -4460,7 +4504,24 @@
                 });
 
                 const unsubKeys = db.collection('config').doc('geminiKeys').onSnapshot(doc => {
-                    geminiKeys = doc.exists ? (doc.data().keys || []) : [];
+                    if (doc.exists) {
+                        const data = doc.data() || {};
+                        geminiKeys = data.keys || [];
+                        // Sync cloud solve counts across all 20 active users
+                        if (data.stats && typeof data.stats === 'object') {
+                            Object.keys(data.stats).forEach(k => {
+                                const s = data.stats[k];
+                                const count = typeof s === 'number' ? s : (s?.solves || 0);
+                                if (count > (geminiKeySolveCount.get(k) || 0)) {
+                                    geminiKeySolveCount.set(k, count);
+                                }
+                            });
+                            saveSolveCountsToStorage();
+                        }
+                    } else {
+                        geminiKeys = [];
+                    }
+                    try { localStorage.setItem('local_gemini_keys', JSON.stringify(geminiKeys)); } catch (e) {}
                     renderGeminiKeys();
                 });
                 activeDbListeners.push(unsubKeys);
@@ -4733,103 +4794,602 @@
             alert("Database disconnected successfully.");
         }
 
+        const GEMINI_RPM_LIMIT = 15; // Free-tier Gemini quota is 15 requests per minute
         let geminiKeyCooldownMap = new Map();
         let geminiKeyStatusMap = new Map();
+        let geminiKeyReqHistory = new Map(); // key -> [timestamp1, timestamp2, ...] (requests in last 60s)
+        let geminiKeySolveCount = new Map(); // shortKey -> total successful solves
+        let geminiKeyRoundRobinIndex = 0; // persistent index to rotate evenly
+
+        // Initialize saved solve counts from localStorage
+        try {
+            const savedCounts = localStorage.getItem('gemini_key_solve_counts');
+            if (savedCounts) {
+                const parsed = JSON.parse(savedCounts);
+                Object.keys(parsed).forEach(k => geminiKeySolveCount.set(k, parsed[k]));
+            }
+        } catch (e) {}
+
+        function saveSolveCountsToStorage() {
+            try {
+                const obj = {};
+                geminiKeySolveCount.forEach((val, key) => {
+                    obj[key] = val;
+                });
+                localStorage.setItem('gemini_key_solve_counts', JSON.stringify(obj));
+            } catch (e) {}
+        }
+
+        // Clean up timestamps older than 60s and return recent request count
+        function getKeyRecentReqCount(key) {
+            if (!key) return 0;
+            const now = Date.now();
+            const history = geminiKeyReqHistory.get(key) || [];
+            const recent = history.filter(t => now - t < 60000);
+            geminiKeyReqHistory.set(key, recent);
+            return recent.length;
+        }
+
+        // Record usage when a solve request is executed
+        function recordKeyUsage(key) {
+            if (!key) return;
+            const now = Date.now();
+            const history = geminiKeyReqHistory.get(key) || [];
+            history.push(now);
+            const recent = history.filter(t => now - t < 60000);
+            geminiKeyReqHistory.set(key, recent);
+            
+            const shortKey = key.substring(0, 10);
+            const prev = geminiKeySolveCount.get(shortKey) || 0;
+            const newCount = prev + 1;
+            geminiKeySolveCount.set(shortKey, newCount);
+            saveSolveCountsToStorage();
+
+            // 1. Sync increment to Firebase Firestore across all 20 devices
+            if (db) {
+                try {
+                    const inc = (typeof firebase !== 'undefined' && firebase.firestore && firebase.firestore.FieldValue)
+                        ? firebase.firestore.FieldValue.increment(1)
+                        : newCount;
+                    db.collection('config').doc('geminiKeys').set({
+                        stats: {
+                            [shortKey]: {
+                                solves: inc,
+                                lastUsed: now
+                            }
+                        },
+                        totalAiSolves: inc,
+                        updatedAt: now
+                    }, { merge: true }).catch(err => console.warn("Firestore key stats sync notice:", err));
+                } catch (e) {}
+            }
+
+            // 2. Also notify server stats endpoint
+            fetch('/api/gemini/stats/increment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ apiKey: key })
+            }).catch(() => {});
+        }
+
+        async function fetchGeminiStatsFromServer() {
+            try {
+                const res = await fetch('/api/gemini/stats');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && data.stats && typeof data.stats === 'object') {
+                        let changed = false;
+                        Object.keys(data.stats).forEach(k => {
+                            const count = data.stats[k]?.solves || 0;
+                            if (count > (geminiKeySolveCount.get(k) || 0)) {
+                                geminiKeySolveCount.set(k, count);
+                                changed = true;
+                            }
+                        });
+                        if (changed) {
+                            saveSolveCountsToStorage();
+                            renderGeminiKeys();
+                        }
+                    }
+                }
+            } catch (e) {}
+        }
+
+        function getKeySolvesCount(key) {
+            if (!key) return 0;
+            const shortKey = key.substring(0, 10);
+            return geminiKeySolveCount.get(shortKey) || 0;
+        }
+
+        function getKeyAvailableRPM(key) {
+            const used = getKeyRecentReqCount(key);
+            return Math.max(0, GEMINI_RPM_LIMIT - used);
+        }
+
+        // Intelligent rotator: returns active keys sorted by lowest recent usage & round-robin offset
+        // Guarantees no single key is hammered or exhausted
+        function getRotatedGeminiKeys() {
+            const now = Date.now();
+            let available = geminiKeys.filter(k => {
+                if (!k) return false;
+                const status = geminiKeyStatusMap.get(k);
+                if (status && (status.includes("Invalid") || status.includes("403") || status.includes("Denied"))) return false;
+                const expiry = geminiKeyCooldownMap.get(k);
+                if (expiry && now < expiry) return false;
+                return true;
+            });
+
+            const envKey = (typeof process !== 'undefined' && process.env && process.env.GEMINI_API_KEY) ? process.env.GEMINI_API_KEY : '';
+            if (available.length === 0 && envKey) available.push(envKey);
+            if (available.length === 0) available.push("");
+
+            if (available.length <= 1) return available;
+
+            // Sort keys:
+            // 1. Keys with remaining RPM quota first
+            // 2. Fewest requests made in the rolling 60s window (least-loaded first)
+            // 3. Round-robin tie-breaking
+            const sorted = [...available].sort((a, b) => {
+                const usedA = getKeyRecentReqCount(a);
+                const usedB = getKeyRecentReqCount(b);
+                const aAvailable = usedA < GEMINI_RPM_LIMIT;
+                const bAvailable = usedB < GEMINI_RPM_LIMIT;
+                if (aAvailable !== bAvailable) return aAvailable ? -1 : 1;
+                if (usedA !== usedB) return usedA - usedB;
+
+                const idxA = (geminiKeys.indexOf(a) - geminiKeyRoundRobinIndex + geminiKeys.length) % geminiKeys.length;
+                const idxB = (geminiKeys.indexOf(b) - geminiKeyRoundRobinIndex + geminiKeys.length) % geminiKeys.length;
+                return idxA - idxB;
+            });
+
+            // Advance index for next rotation
+            geminiKeyRoundRobinIndex = (geminiKeyRoundRobinIndex + 1) % Math.max(1, available.length);
+            return sorted;
+        }
+
+        function getPoolStats() {
+            const now = Date.now();
+            let totalAvailableRPM = 0;
+            let totalMaxRPM = 0;
+            let activeCount = 0;
+            let totalSolves = 0;
+
+            geminiKeys.forEach(k => {
+                const status = geminiKeyStatusMap.get(k);
+                const isBad = status && (status.includes("Invalid") || status.includes("403") || status.includes("Denied"));
+                const expiry = geminiKeyCooldownMap.get(k);
+                const inCooldown = expiry && now < expiry;
+
+                if (!isBad && !inCooldown) {
+                    activeCount++;
+                    totalMaxRPM += GEMINI_RPM_LIMIT;
+                    totalAvailableRPM += getKeyAvailableRPM(k);
+                }
+                totalSolves += getKeySolvesCount(k);
+            });
+
+            return {
+                activeCount,
+                totalKeys: geminiKeys.length,
+                totalMaxRPM,
+                totalAvailableRPM,
+                totalSolves,
+                dailyEst: activeCount * 1500
+            };
+        }
+
+        function updatePoolCapacityDisplay() {
+            const stats = getPoolStats();
+            const badge = document.getElementById('gemini-pool-rpm-badge');
+            const totalText = document.getElementById('pool-total-rpm-text');
+            const remainText = document.getElementById('pool-remaining-now-text');
+            const activeText = document.getElementById('pool-active-count-text');
+
+            if (badge) {
+                badge.innerText = `${stats.totalAvailableRPM} / ${stats.totalMaxRPM} RPM Available`;
+                badge.style.color = stats.totalAvailableRPM > 0 ? '#4ade80' : '#f87171';
+                badge.style.background = stats.totalAvailableRPM > 0 ? 'rgba(74,222,128,0.12)' : 'rgba(248,113,113,0.12)';
+                badge.style.borderColor = stats.totalAvailableRPM > 0 ? 'rgba(74,222,128,0.25)' : 'rgba(248,113,113,0.25)';
+            }
+            if (totalText) {
+                totalText.innerText = `${stats.totalMaxRPM} req/min`;
+            }
+            if (remainText) {
+                remainText.innerText = `${stats.totalAvailableRPM} solves available this min`;
+            }
+            if (activeText) {
+                activeText.innerText = `${stats.activeCount} active of ${stats.totalKeys} keys (~15 RPM each • ~${stats.dailyEst.toLocaleString()} daily solves)`;
+            }
+            const cloudSolvesText = document.getElementById('pool-cloud-solves-text');
+            if (cloudSolvesText) {
+                cloudSolvesText.innerText = `${stats.totalSolves} solve${stats.totalSolves === 1 ? '' : 's'}`;
+            }
+        }
+
+        // Helper to verify a Gemini API key against Google (works with both Node backend and static hosted frontend)
+        async function verifyGeminiKeyOnline(key) {
+            const cleanKey = (key || '').trim();
+            if (!cleanKey) {
+                return { valid: false, reason: 'missing_key', message: 'No API key provided.' };
+            }
+
+            // 1. Try server-side verification endpoint
+            try {
+                const res = await fetch("/api/gemini/verify-key", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ apiKey: cleanKey })
+                });
+                if (res.ok) {
+                    const data = await res.json().catch(() => null);
+                    if (data && typeof data.valid === 'boolean') {
+                        return data;
+                    }
+                }
+            } catch (serverErr) {
+                // Server endpoint unreachable (e.g. hosted on static hosting like Firebase Hosting or GitHub Pages)
+            }
+
+            // 2. Direct browser fallback using Google Generative Language API (CORS enabled on Google's endpoint)
+            try {
+                const checkUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(cleanKey)}&pageSize=1`;
+                const gRes = await fetch(checkUrl, { method: "GET" });
+                const gData = await gRes.json().catch(() => ({}));
+
+                if (gRes.ok) {
+                    return { valid: true, status: 'Valid', message: 'API key is valid and working.' };
+                }
+
+                const err = (gData && gData.error) ? gData.error : {};
+                const errMsg = err.message || '';
+                const reason = err.details?.[0]?.reason || err.status || '';
+
+                if (gRes.status === 400 || reason === 'API_KEY_INVALID' || errMsg.includes('API key not valid')) {
+                    return {
+                        valid: false,
+                        reason: 'invalid_key',
+                        message: 'API key not valid. Google rejected this key.'
+                    };
+                }
+
+                if (gRes.status === 403 || reason === 'PERMISSION_DENIED' || errMsg.includes('PERMISSION_DENIED') || errMsg.includes('Generative Language API has not been used')) {
+                    return {
+                        valid: false,
+                        reason: 'permission_denied',
+                        message: 'Permission denied: Please enable Generative Language API in Google Cloud Console.'
+                    };
+                }
+
+                if (gRes.status === 429 || reason === 'RESOURCE_EXHAUSTED' || errMsg.includes('quota') || errMsg.includes('429')) {
+                    return {
+                        valid: true,
+                        isQuotaExhausted: true,
+                        reason: 'quota_exhausted',
+                        message: 'Key is valid, but free-tier quota is currently exhausted.'
+                    };
+                }
+
+                return {
+                    valid: false,
+                    reason: 'error',
+                    message: errMsg || 'Key verification check failed.'
+                };
+            } catch (netErr) {
+                // 3. Fallback to @google/genai SDK in browser
+                try {
+                    const { GoogleGenAI } = await import("https://esm.sh/@google/genai");
+                    const ai = new GoogleGenAI({ apiKey: cleanKey });
+                    const resp = await ai.models.generateContent({
+                        model: 'gemini-2.5-flash',
+                        contents: [{ parts: [{ text: 'ping' }] }],
+                    });
+                    if (resp && resp.text) {
+                        return { valid: true, status: 'Valid', message: 'API key verified and active.' };
+                    }
+                } catch (sdkErr) {
+                    const msg = (sdkErr && sdkErr.message) ? sdkErr.message : String(sdkErr);
+                    if (msg.includes('API key not valid') || msg.includes('API_KEY_INVALID')) {
+                        return { valid: false, reason: 'invalid_key', message: 'Invalid API key.' };
+                    }
+                    if (msg.includes('403') || msg.includes('PERMISSION_DENIED')) {
+                        return { valid: false, reason: 'permission_denied', message: 'Permission denied (403).' };
+                    }
+                    if (msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
+                        return { valid: true, isQuotaExhausted: true, reason: 'quota_exhausted', message: 'Key valid, quota exhausted.' };
+                    }
+                }
+                return { valid: false, reason: 'network_error', message: 'Network connection failed. Please check internet access.' };
+            }
+        }
 
         async function addGeminiKey() {
             const keyInput = document.getElementById('new-gemini-key');
+            const addBtn = document.getElementById('btn-add-gemini-key') || keyInput?.nextElementSibling;
+            if (!keyInput) return;
             const newKey = keyInput.value.trim();
-            if (!newKey) return;
-            if (!db) return alert("Firebase not connected.");
-            const toast = showToast("Adding key...", "syncing", 0);
+            if (!newKey) {
+                showToast("Please enter an API key", "warning", 2500);
+                keyInput.focus();
+                return;
+            }
+
+            // 1. DUPLICATE CHECK
+            const isDuplicate = geminiKeys.some(k => (k || '').trim() === newKey);
+            if (isDuplicate) {
+                showToast("Duplicate Key: This API key is already in the pool!", "error", 4000);
+                keyInput.focus();
+                return;
+            }
+
+            // 2. VALIDITY CHECK
+            const originalBtnText = addBtn ? addBtn.innerText : 'Add';
+            if (addBtn) {
+                addBtn.disabled = true;
+                addBtn.innerText = 'Checking...';
+            }
+            const toast = showToast("Checking key validity with Google...", "syncing", 0);
+
             try {
+                const checkResult = await verifyGeminiKeyOnline(newKey);
+                toast.remove();
+
+                if (!checkResult.valid) {
+                    if (addBtn) {
+                        addBtn.disabled = false;
+                        addBtn.innerText = originalBtnText;
+                    }
+                    if (checkResult.reason === 'invalid_key') {
+                        showToast("Cannot add: Invalid API key (rejected by Google)!", "error", 5000);
+                    } else if (checkResult.reason === 'permission_denied') {
+                        showToast("Cannot add: Key has no permission (403: Generative Language API disabled)!", "error", 5000);
+                    } else {
+                        showToast("Validation failed: " + (checkResult.message || "Key could not be verified"), "error", 4500);
+                    }
+                    keyInput.focus();
+                    return;
+                }
+
+                // Key is verified and valid!
+                if (checkResult.isQuotaExhausted) {
+                    geminiKeyStatusMap.set(newKey, "Quota Limit (429)");
+                    geminiKeyCooldownMap.set(newKey, Date.now() + 60000);
+                } else {
+                    geminiKeyStatusMap.set(newKey, "Valid");
+                    geminiKeyCooldownMap.delete(newKey);
+                }
+
                 const updatedKeys = [...geminiKeys, newKey];
-                await db.collection('config').doc('geminiKeys').set({ keys: updatedKeys });
-                toast.classList.add('fade-out'); setTimeout(() => toast.remove(), 300);
-                showToast("Key added to Firebase", "success");
+                if (db) {
+                    await db.collection('config').doc('geminiKeys').set({ keys: updatedKeys }, { merge: true });
+                    try { localStorage.setItem('local_gemini_keys', JSON.stringify(updatedKeys)); } catch (e) {}
+                    showToast("Key verified & saved to Firebase!", "success", 2500);
+                } else {
+                    geminiKeys = updatedKeys;
+                    try { localStorage.setItem('local_gemini_keys', JSON.stringify(updatedKeys)); } catch (e) {}
+                    renderGeminiKeys();
+                    showToast("Key verified & saved locally!", "success", 2500);
+                }
                 keyInput.value = "";
-            } catch (e) { toast.remove(); showToast("Failed to add key", "error"); }
+            } catch (e) {
+                toast.remove();
+                showToast("Failed to validate key: " + (e.message || "Unknown error"), "error", 3500);
+            } finally {
+                if (addBtn) {
+                    addBtn.disabled = false;
+                    addBtn.innerText = originalBtnText;
+                }
+            }
         }
 
         async function removeGeminiKey(index) {
-            if (!confirm("Remove this API key?")) return;
+            if (!confirm("Remove this API key from the pool?")) return;
             const toast = showToast("Removing key...", "syncing", 0);
             try {
+                const targetKey = geminiKeys[index];
+                if (targetKey) {
+                    geminiKeyStatusMap.delete(targetKey);
+                    geminiKeyCooldownMap.delete(targetKey);
+                    geminiKeyReqHistory.delete(targetKey);
+                }
                 const updatedKeys = geminiKeys.filter((_, i) => i !== index);
-                await db.collection('config').doc('geminiKeys').set({ keys: updatedKeys });
-                toast.classList.add('fade-out'); setTimeout(() => toast.remove(), 300);
-                showToast("Key removed from Firebase", "success");
-            } catch (e) { toast.remove(); showToast("Failed to remove key", "error"); }
+                if (db) {
+                    await db.collection('config').doc('geminiKeys').set({ keys: updatedKeys }, { merge: true });
+                }
+                geminiKeys = updatedKeys;
+                try { localStorage.setItem('local_gemini_keys', JSON.stringify(updatedKeys)); } catch (e) {}
+                renderGeminiKeys();
+                toast.classList.add('fade-out');
+                setTimeout(() => toast.remove(), 300);
+                showToast("Key removed from pool", "success", 2000);
+            } catch (e) {
+                toast.remove();
+                showToast("Failed to remove key", "error", 2500);
+            }
         }
 
-        async function testGeminiKey(index) {
+        async function testGeminiKey(index, btnElement) {
             const key = geminiKeys[index];
             if (!key) return;
+
+            const btn = btnElement || document.querySelector(`#gemini-key-list > div:nth-child(${index + 1}) button:first-child`);
+            const originalText = btn ? btn.innerText : 'Test';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerText = 'Testing...';
+            }
+
             const toast = showToast("Testing key...", "syncing", 0);
             try {
-                const res = await fetch("/api/gemini/solve", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        apiKey: key,
-                        contents: [{ parts: [{ text: "ping" }] }]
-                    })
-                });
+                const res = await verifyGeminiKeyOnline(key);
                 toast.remove();
-                const data = await res.json().catch(() => ({}));
-                if (data.success && data.text) {
-                    geminiKeyStatusMap.set(key, "Valid");
-                    geminiKeyCooldownMap.delete(key);
-                    showToast("Key verified and working!", "success", 2000);
-                } else if (data.reason === 'quota_exhausted') {
-                    geminiKeyStatusMap.set(key, "Quota Limit (429)");
-                    geminiKeyCooldownMap.set(key, Date.now() + 60000);
-                    showToast("Rate limit / Free tier quota reached (Wait ~1 min)", "warning", 3500);
-                } else if (data.reason === 'permission_denied') {
+
+                if (res.valid) {
+                    if (res.isQuotaExhausted) {
+                        geminiKeyStatusMap.set(key, "Quota Limit (429)");
+                        geminiKeyCooldownMap.set(key, Date.now() + 60000);
+                        showToast("Valid key, but quota limit reached (429)", "warning", 3500);
+                    } else {
+                        geminiKeyStatusMap.set(key, "Valid");
+                        geminiKeyCooldownMap.delete(key);
+                        showToast("Key verified and working!", "success", 2500);
+                    }
+                } else if (res.reason === 'invalid_key') {
+                    geminiKeyStatusMap.set(key, "Invalid Key (400)");
+                    geminiKeyCooldownMap.set(key, Date.now() + 86400000);
+                    showToast("API key is invalid! Please remove or replace it.", "error", 4500);
+                } else if (res.reason === 'permission_denied') {
                     geminiKeyStatusMap.set(key, "Permission Denied (403)");
                     geminiKeyCooldownMap.set(key, Date.now() + 86400000);
                     showToast("403: No permission (Check Generative Language API in Cloud Console)", "error", 4000);
                 } else {
                     geminiKeyStatusMap.set(key, "Notice");
-                    showToast("Notice: " + (data.message || "Key could not be verified"), "warning", 3000);
+                    showToast("Notice: " + (res.message || "Key could not be verified"), "warning", 3500);
                 }
                 renderGeminiKeys();
-            } catch {
+            } catch (err) {
                 toast.remove();
-                showToast("Request failed", "error");
+                showToast("Test failed: " + (err.message || "Request failed"), "error", 3500);
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerText = originalText;
+                }
             }
         }
 
+        async function testAllGeminiKeys(btn) {
+            if (!geminiKeys || geminiKeys.length === 0) {
+                showToast("No keys in the pool to test.", "info", 2000);
+                return;
+            }
+            const originalText = btn ? btn.innerText : 'Test All';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerText = "Testing...";
+            }
+            const toast = showToast(`Testing ${geminiKeys.length} key(s)...`, "syncing", 0);
+            let validCount = 0;
+            let errorCount = 0;
+
+            for (let i = 0; i < geminiKeys.length; i++) {
+                const key = geminiKeys[i];
+                try {
+                    const res = await verifyGeminiKeyOnline(key);
+                    if (res.valid) {
+                        validCount++;
+                        if (res.isQuotaExhausted) {
+                            geminiKeyStatusMap.set(key, "Quota Limit (429)");
+                            geminiKeyCooldownMap.set(key, Date.now() + 60000);
+                        } else {
+                            geminiKeyStatusMap.set(key, "Valid");
+                            geminiKeyCooldownMap.delete(key);
+                        }
+                    } else {
+                        errorCount++;
+                        if (res.reason === 'invalid_key') {
+                            geminiKeyStatusMap.set(key, "Invalid Key (400)");
+                        } else if (res.reason === 'permission_denied') {
+                            geminiKeyStatusMap.set(key, "Permission Denied (403)");
+                        } else {
+                            geminiKeyStatusMap.set(key, "Notice");
+                        }
+                    }
+                } catch {
+                    errorCount++;
+                    geminiKeyStatusMap.set(key, "Error");
+                }
+            }
+            toast.remove();
+            renderGeminiKeys();
+            if (btn) {
+                btn.disabled = false;
+                btn.innerText = originalText;
+            }
+            showToast(`Key tests finished: ${validCount} valid, ${errorCount} need attention`, validCount > 0 ? "success" : "warning", 3500);
+        }
+
         function renderGeminiKeys() {
+            updatePoolCapacityDisplay();
             const list = document.getElementById('gemini-key-list');
             if (!list) return;
             list.innerHTML = "";
             if (geminiKeys.length === 0) {
-                list.innerHTML = `<div style="font-size:12px; color:var(--text-secondary); padding:4px 0">No custom keys configured. Using server default key.</div>`;
+                list.innerHTML = `<div style="font-size:12px; color:var(--text-secondary); padding:8px 10px; background:rgba(255,255,255,0.03); border-radius:6px; border:1px dashed rgba(255,255,255,0.1)">No custom keys in pool. The app will use the server's default Gemini key if configured.</div>`;
                 return;
             }
+
+            const rotatedList = getRotatedGeminiKeys();
+            const nextKey = rotatedList[0] || '';
+
             geminiKeys.forEach((key, i) => {
-                const status = geminiKeyStatusMap.get(key) || (geminiKeyCooldownMap.has(key) ? "Cooldown" : "Ready");
+                const now = Date.now();
+                const expiry = geminiKeyCooldownMap.get(key);
+                const inCooldown = expiry && now < expiry;
+                let status = geminiKeyStatusMap.get(key) || (inCooldown ? "Quota Limit (429)" : "Ready");
+                if (inCooldown && !status.includes("429") && !status.includes("Cooldown")) {
+                    status = "Quota Limit (429)";
+                }
+
                 let statusColor = "#9ca3af";
-                if (status === "Valid" || status === "Ready") statusColor = "#4ade80";
-                if (status.includes("403") || status.includes("Denied")) statusColor = "#f87171";
-                if (status.includes("429") || status.includes("Quota") || status === "Cooldown") statusColor = "#fbbf24";
-                if (status.includes("Invalid")) statusColor = "#f87171";
+                let statusBg = "rgba(156,163,175,0.12)";
+                if (status === "Valid" || status === "Ready") {
+                    statusColor = "#4ade80";
+                    statusBg = "rgba(74,222,128,0.12)";
+                } else if (status.includes("403") || status.includes("Denied") || status.includes("Invalid") || status.includes("400")) {
+                    statusColor = "#f87171";
+                    statusBg = "rgba(248,113,113,0.12)";
+                } else if (status.includes("429") || status.includes("Quota") || status.includes("Cooldown")) {
+                    statusColor = "#fbbf24";
+                    statusBg = "rgba(251,191,36,0.12)";
+                }
+
+                const recentUsed = getKeyRecentReqCount(key);
+                const remainingRPM = getKeyAvailableRPM(key);
+                const totalSolves = getKeySolvesCount(key);
+                const isNextInLine = (key === nextKey && !inCooldown && !status.includes("Invalid") && !status.includes("403"));
 
                 const div = document.createElement('div');
-                div.style = "display:flex; justify-content:space-between; align-items:center; background:#2c2c2c; padding:8px 10px; border-radius:4px; margin-bottom:6px; border:1px solid rgba(255,255,255,0.06)";
+                div.style = "display:flex; justify-content:space-between; align-items:center; background:#242428; padding:10px 12px; border-radius:8px; margin-bottom:8px; border:1px solid " + (isNextInLine ? "rgba(187,134,252,0.4)" : "rgba(255,255,255,0.07)") + "; gap:10px;";
+                const masked = (key && key.length > 10) ? `${key.substring(0, 6)}...${key.substring(key.length - 4)}` : (key || '');
+
+                const rpmColor = remainingRPM > 5 ? '#4ade80' : (remainingRPM > 0 ? '#fbbf24' : '#f87171');
+                const rpmPercent = Math.round((remainingRPM / GEMINI_RPM_LIMIT) * 100);
+
                 div.innerHTML = `
-                    <div style="display:flex; flex-direction:column; gap:2px">
-                        <span style="font-family:monospace; font-size:12px; color:#fff">${key.substring(0, 6)}...${key.substring(key.length - 4)}</span>
-                        <span style="font-size:10px; color:${statusColor}; font-weight:600">${status}</span>
+                    <div style="display:flex; flex-direction:column; gap:4px; min-width:0; flex:1;">
+                        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                            <span style="font-family:monospace; font-size:12px; color:#fff; font-weight:600; letter-spacing:0.5px;">${masked}</span>
+                            <span style="font-size:10px; color:${statusColor}; background:${statusBg}; padding:1px 6px; border-radius:4px; font-weight:600;">${status}</span>
+                            ${isNextInLine ? '<span style="font-size:9px; color:#c084fc; background:rgba(192,132,252,0.15); padding:1px 6px; border-radius:4px; font-weight:600;">Next in Rotation</span>' : ''}
+                        </div>
+                        <div style="display:flex; align-items:center; gap:8px; font-size:11px; color:#94a3b8; flex-wrap:wrap; margin-top:1px;">
+                            <span style="color:${rpmColor}; font-weight:600; display:inline-flex; align-items:center; gap:3px;">
+                                <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                                ${remainingRPM}/${GEMINI_RPM_LIMIT} RPM available
+                            </span>
+                            <span style="opacity:0.3;">•</span>
+                            <span style="color:#cbd5e1; font-weight:600;" title="Real-time AI solves synchronized across all ~20 users in pool">${totalSolves} solve${totalSolves === 1 ? '' : 's'} handled</span>
+                            <span style="opacity:0.3;">•</span>
+                            <span style="color:#a1a1aa;">${recentUsed} req in last 60s</span>
+                        </div>
+                        <div style="width:100%; max-width:220px; height:4px; background:rgba(255,255,255,0.08); border-radius:2px; overflow:hidden; margin-top:2px;" title="${remainingRPM} of ${GEMINI_RPM_LIMIT} RPM available">
+                            <div style="width:${rpmPercent}%; height:100%; background:${rpmColor}; transition:width 0.3s ease;"></div>
+                        </div>
                     </div>
-                    <div style="display:flex; gap:6px">
-                        <button class="btn btn-secondary" style="width:auto; padding:4px 10px; margin-bottom:0; font-size:11px" onclick="testGeminiKey(${i})">Test</button>
-                        <button class="btn btn-danger" style="width:auto; padding:4px 10px; margin-bottom:0; font-size:11px" onclick="removeGeminiKey(${i})">Remove</button>
+                    <div style="display:flex; gap:6px; flex-shrink:0;">
+                        <button class="btn btn-secondary" style="width:auto; padding:5px 12px; margin-bottom:0; font-size:11px; font-weight:600;" onclick="testGeminiKey(${i}, this)">Test</button>
+                        <button class="btn btn-danger" style="width:auto; padding:5px 10px; margin-bottom:0; font-size:11px;" onclick="removeGeminiKey(${i})">Remove</button>
                     </div>`;
                 list.appendChild(div);
             });
         }
+
+        // Periodically refresh RPM sliding windows
+        setInterval(() => {
+            if (activeTab === 'settings') {
+                updatePoolCapacityDisplay();
+            }
+        }, 5000);
 
         async function handleScreenshot(e) {
             clearSolverAutoRefresh();
@@ -5204,7 +5764,7 @@
                     for (let a of answers) {
                         if (a && a.data) compressedAnswers.push(await compressCircleCrop(a.data, 56));
                     }
-                    recordSolverHistory(solvedDigits.substring(0, 3), compressedTargets, compressedAnswers, totalSeconds);
+                    recordSolverHistory(solvedDigits.substring(0, 3), compressedTargets, compressedAnswers, totalSeconds, matchSource.innerText);
                 }
 
                 // Auto Refresh Solver after configured seconds
@@ -5843,25 +6403,9 @@
 
         async function callGeminiForPuzzle(screenshot, targets, answers, pHashResults, lockedResults = []) {
             const debugContent = document.getElementById('debug-content');
-            let availableKeys = [...geminiKeys];
-            const envKey = (typeof process !== 'undefined' && process.env && process.env.GEMINI_API_KEY) ? process.env.GEMINI_API_KEY : '';
-            if (availableKeys.length === 0 && envKey) availableKeys.push(envKey);
-            if (availableKeys.length === 0) availableKeys.push(""); // Server fallback
+            const activeKeys = getRotatedGeminiKeys();
 
-            // Filter out keys currently on cooldown due to quota exhaustion or permission denial
-            const now = Date.now();
-            const activeKeys = availableKeys.filter(k => {
-                if (!k) return true; // Server default key
-                const expiry = geminiKeyCooldownMap.get(k);
-                if (!expiry) return true;
-                if (now > expiry) {
-                    geminiKeyCooldownMap.delete(k);
-                    return true;
-                }
-                return false;
-            });
-
-            if (activeKeys.length === 0) {
+            if (!activeKeys || activeKeys.length === 0) {
                 if (debugContent) debugContent.innerHTML += `<div style="padding:4px 8px; background:rgba(234,179,8,0.15); border:1px solid rgba(234,179,8,0.3); border-radius:4px; font-size:9px; margin-top:4px; color:#facc15">All Gemini API keys are in cooldown. Falling back to local solver.</div>`;
                 return "000";
             }
@@ -5940,8 +6484,7 @@ Example: 132`;
 
             contents.parts.push({ text: prompt });
 
-            activeKeys.sort(() => Math.random() - 0.5);
-
+            // Keys are pre-sorted by least recent usage & round-robin offset to prevent exhaustion
             for (let apiKey of activeKeys) {
                 try {
                     let text = "";
@@ -5963,15 +6506,17 @@ Example: 132`;
                             if (apiKey) {
                                 geminiKeyCooldownMap.set(apiKey, Date.now() + 60000);
                                 geminiKeyStatusMap.set(apiKey, "Quota Limit (429)");
+                                updatePoolCapacityDisplay();
                             }
-                            if (debugContent) debugContent.innerHTML += `<div style="padding:4px 8px; background:rgba(234,179,8,0.15); border:1px solid rgba(234,179,8,0.3); border-radius:4px; font-size:9px; margin-top:4px; color:#facc15">Gemini quota limit reached (Free tier). Smart local solver active.</div>`;
+                            if (debugContent) debugContent.innerHTML += `<div style="padding:4px 8px; background:rgba(234,179,8,0.15); border:1px solid rgba(234,179,8,0.3); border-radius:4px; font-size:9px; margin-top:4px; color:#facc15">Key rate limited (429). Rotating immediately to next key in pool...</div>`;
                             continue;
                         } else if (data.reason === 'permission_denied') {
                             if (apiKey) {
                                 geminiKeyCooldownMap.set(apiKey, Date.now() + 86400000);
                                 geminiKeyStatusMap.set(apiKey, "Permission Denied (403)");
+                                updatePoolCapacityDisplay();
                             }
-                            if (debugContent) debugContent.innerHTML += `<div style="padding:4px 8px; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3); border-radius:4px; font-size:9px; margin-top:4px; color:#f87171">Gemini Key permission denied (403). Using local solver.</div>`;
+                            if (debugContent) debugContent.innerHTML += `<div style="padding:4px 8px; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3); border-radius:4px; font-size:9px; margin-top:4px; color:#f87171">Gemini Key permission denied (403). Rotating to next key.</div>`;
                             continue;
                         } else {
                             if (apiKey) geminiKeyStatusMap.set(apiKey, "Notice");
@@ -5995,9 +6540,9 @@ Example: 132`;
                             } catch (mErr) {
                                 const mErrStr = (mErr && mErr.message) ? mErr.message : String(mErr);
                                 if (mErrStr.includes("resource_exhausted") || mErrStr.includes("429") || mErrStr.includes("quota")) {
-                                    console.warn("Gemini key quota exhausted/rate limited. Placing in 3-min cooldown.");
-                                    geminiKeyCooldownMap.set(apiKey, Date.now() + 180000);
+                                    geminiKeyCooldownMap.set(apiKey, Date.now() + 60000);
                                     geminiKeyStatusMap.set(apiKey, "Quota Limit (429)");
+                                    updatePoolCapacityDisplay();
                                     continue;
                                 }
                                 response = await ai.models.generateContent({
@@ -6010,14 +6555,14 @@ Example: 132`;
                         } catch (clientErr) {
                             const clientErrStr = (clientErr && clientErr.message) ? clientErr.message : String(clientErr);
                             if (clientErrStr.includes("resource_exhausted") || clientErrStr.includes("429") || clientErrStr.includes("quota")) {
-                                console.warn("Gemini key quota exhausted:", apiKey.substring(0, 8) + "...");
-                                geminiKeyCooldownMap.set(apiKey, Date.now() + 180000);
+                                geminiKeyCooldownMap.set(apiKey, Date.now() + 60000);
                                 geminiKeyStatusMap.set(apiKey, "Quota Limit (429)");
+                                updatePoolCapacityDisplay();
                             } else if (clientErrStr.includes("PERMISSION_DENIED") || clientErrStr.includes("403") || clientErrStr.includes("does not have permission")) {
-                                console.warn("Gemini key permission denied:", apiKey.substring(0, 8) + "...");
                                 geminiKeyCooldownMap.set(apiKey, Date.now() + 86400000);
                                 geminiKeyStatusMap.set(apiKey, "Permission Denied (403)");
-                                if (debugContent) debugContent.innerHTML += `<div style="padding:4px 8px; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3); border-radius:4px; font-size:9px; margin-top:4px; color:#f87171">Gemini Key permission denied (403). Using local solver.</div>`;
+                                updatePoolCapacityDisplay();
+                                if (debugContent) debugContent.innerHTML += `<div style="padding:4px 8px; background:rgba(239,68,68,0.15); border:1px solid rgba(239,68,68,0.3); border-radius:4px; font-size:9px; margin-top:4px; color:#f87171">Gemini Key permission denied (403). Rotating to next key.</div>`;
                             } else {
                                 console.warn("Gemini client fallback notice:", clientErrStr);
                             }
@@ -6026,9 +6571,15 @@ Example: 132`;
                     }
 
                     if (text) {
-                        if (debugContent) debugContent.innerHTML += `<div style="padding:4px 8px; background:rgba(0,0,0,0.3); border-radius:4px; font-size:9px; margin-top:4px; color:#aaa">Gemini: "${text}"</div>`;
                         const digits = text.match(/[1-4]/g);
-                        if (digits && digits.length >= 3) return digits.slice(0, 3).join("");
+                        if (digits && digits.length >= 3) {
+                            if (apiKey) {
+                                recordKeyUsage(apiKey);
+                                updatePoolCapacityDisplay();
+                            }
+                            if (debugContent) debugContent.innerHTML += `<div style="padding:4px 8px; background:rgba(0,0,0,0.3); border-radius:4px; font-size:9px; margin-top:4px; color:#aaa">Gemini [${apiKey ? apiKey.substring(0, 6) + '...' : 'Server'}]: "${text}"</div>`;
+                            return digits.slice(0, 3).join("");
+                        }
                     }
                 } catch (err) {
                     console.warn("Gemini pipeline notice:", err?.message || err);

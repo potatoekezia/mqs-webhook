@@ -32,6 +32,132 @@ async function startServer() {
     });
   }
 
+  // Server-side Gemini API key verification endpoint
+  app.post('/api/gemini/verify-key', async (req, res) => {
+    try {
+      const { apiKey } = req.body;
+      const cleanKey = (typeof apiKey === 'string') ? apiKey.trim() : '';
+
+      if (!cleanKey) {
+        return res.status(400).json({
+          valid: false,
+          reason: 'missing_key',
+          message: 'No API key provided.',
+        });
+      }
+
+      // Check via Google Generative Language API
+      try {
+        const checkUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(cleanKey)}&pageSize=1`;
+        const response = await fetch(checkUrl);
+        const data = await response.json().catch(() => ({}));
+
+        if (response.ok) {
+          return res.json({
+            valid: true,
+            status: 'Valid',
+            message: 'API key is valid and working.',
+          });
+        }
+
+        const err = (data && data.error) ? data.error : {};
+        const errMsg = err.message || '';
+        const reason = err.details?.[0]?.reason || err.status || '';
+
+        if (response.status === 400 || reason === 'API_KEY_INVALID' || errMsg.includes('API key not valid')) {
+          return res.json({
+            valid: false,
+            reason: 'invalid_key',
+            message: 'API key not valid. Google rejected this key.',
+          });
+        }
+
+        if (response.status === 403 || reason === 'PERMISSION_DENIED' || errMsg.includes('PERMISSION_DENIED') || errMsg.includes('Generative Language API has not been used')) {
+          return res.json({
+            valid: false,
+            reason: 'permission_denied',
+            message: 'Permission denied: Please enable Generative Language API in Google Cloud Console.',
+          });
+        }
+
+        if (response.status === 429 || reason === 'RESOURCE_EXHAUSTED' || errMsg.includes('quota') || errMsg.includes('429')) {
+          return res.json({
+            valid: true,
+            isQuotaExhausted: true,
+            reason: 'quota_exhausted',
+            message: 'API key is valid, but free-tier quota is currently exhausted.',
+          });
+        }
+
+        return res.json({
+          valid: false,
+          reason: 'error',
+          message: errMsg || 'Verification check failed.',
+        });
+      } catch (fetchErr: any) {
+        // Fallback to GoogleGenAI SDK test
+        try {
+          const ai = new GoogleGenAI({
+            apiKey: cleanKey,
+            httpOptions: { headers: { 'User-Agent': 'aistudio-build' } },
+          });
+          const testRes = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: [{ parts: [{ text: 'ping' }] }],
+          });
+          if (testRes?.text) {
+            return res.json({ valid: true, status: 'Valid', message: 'API key is valid and working.' });
+          }
+        } catch (sdkErr: any) {
+          const msg = sdkErr?.message || String(sdkErr);
+          if (msg.includes('API key not valid') || msg.includes('API_KEY_INVALID')) {
+            return res.json({ valid: false, reason: 'invalid_key', message: 'API key not valid.' });
+          }
+          if (msg.includes('403') || msg.includes('PERMISSION_DENIED')) {
+            return res.json({ valid: false, reason: 'permission_denied', message: 'Permission denied (403).' });
+          }
+          if (msg.includes('429') || msg.includes('quota') || msg.includes('RESOURCE_EXHAUSTED')) {
+            return res.json({ valid: true, isQuotaExhausted: true, reason: 'quota_exhausted', message: 'Key valid, quota exhausted.' });
+          }
+          return res.json({ valid: false, reason: 'error', message: msg || 'Verification failed.' });
+        }
+        return res.status(500).json({ valid: false, reason: 'network_error', message: fetchErr?.message || 'Verification failed.' });
+      }
+    } catch (e: any) {
+      return res.status(500).json({ valid: false, reason: 'server_error', message: e?.message || 'Server error during key validation.' });
+    }
+  });
+
+  // Cloud-synced solve stats across all 20+ users
+  const geminiSolveStats: Record<string, { solves: number; lastUsed: number }> = {};
+  let totalServerAiSolves = 0;
+
+  // Endpoint to retrieve aggregate solve stats across instances
+  app.get('/api/gemini/stats', (_req, res) => {
+    res.json({
+      success: true,
+      stats: geminiSolveStats,
+      totalAiSolves: totalServerAiSolves,
+    });
+  });
+
+  // Endpoint to increment stats when a client-side solve completes
+  app.post('/api/gemini/stats/increment', (req, res) => {
+    try {
+      const { apiKey } = req.body;
+      const shortKey = typeof apiKey === 'string' && apiKey.length >= 8 ? apiKey.substring(0, 10) : 'default';
+      if (!geminiSolveStats[shortKey]) {
+        geminiSolveStats[shortKey] = { solves: 0, lastUsed: Date.now() };
+      }
+      geminiSolveStats[shortKey].solves += 1;
+      geminiSolveStats[shortKey].lastUsed = Date.now();
+      totalServerAiSolves += 1;
+      res.json({ success: true, count: geminiSolveStats[shortKey].solves, total: totalServerAiSolves });
+    } catch {
+      res.json({ success: false });
+    }
+  });
+
   // Server-side Gemini API solve endpoint
   app.post('/api/gemini/solve', async (req, res) => {
     try {
@@ -39,7 +165,7 @@ async function startServer() {
 
       // Try provided apiKey or fallback to server process.env.GEMINI_API_KEY
       let ai = getGeminiClient(apiKey);
-      if (!ai) {
+      if (!ai && !apiKey) {
         ai = getGeminiClient(process.env.GEMINI_API_KEY);
       }
 
@@ -66,12 +192,27 @@ async function startServer() {
 
           const text = response?.text ? response.text.trim() : '';
           if (text) {
+            // Track successful AI solve across all users
+            const effectiveKey = typeof apiKey === 'string' && apiKey.length >= 8 ? apiKey.substring(0, 10) : 'server_key';
+            if (!geminiSolveStats[effectiveKey]) {
+              geminiSolveStats[effectiveKey] = { solves: 0, lastUsed: Date.now() };
+            }
+            geminiSolveStats[effectiveKey].solves += 1;
+            geminiSolveStats[effectiveKey].lastUsed = Date.now();
+            totalServerAiSolves += 1;
+
             return res.json({ text, success: true, model });
           }
         } catch (err: any) {
           const msg = (err && err.message) ? err.message : String(err);
+          const isInvalid = msg.includes('API_KEY_INVALID') || msg.includes('API key not valid') || msg.includes('invalid_api_key');
           const is429 = msg.includes('429') || msg.includes('resource_exhausted') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('quota');
           const is403 = msg.includes('403') || msg.includes('PERMISSION_DENIED') || msg.includes('does not have permission');
+
+          if (isInvalid) {
+            lastReason = 'invalid_key';
+            break;
+          }
 
           if (is429) {
             lastReason = 'quota_exhausted';
@@ -81,14 +222,7 @@ async function startServer() {
 
           if (is403) {
             lastReason = 'permission_denied';
-            // If custom key failed with permission denied and server has a different key, try server key
-            if (apiKey && process.env.GEMINI_API_KEY && apiKey !== process.env.GEMINI_API_KEY) {
-              const serverAi = getGeminiClient(process.env.GEMINI_API_KEY);
-              if (serverAi) {
-                ai = serverAi;
-                continue;
-              }
-            }
+            // If custom key was not passed and server key failed with permission denied, stop
             break;
           }
 
@@ -97,12 +231,19 @@ async function startServer() {
         }
       }
 
-      // If all models hit quota or permission denied, respond gracefully with HTTP 200
+      // If all models hit quota, permission denied, or invalid key, respond gracefully with HTTP 200
+      let fallbackMessage = 'Gemini rate-limited or unavailable; falling back to local solver.';
+      if (lastReason === 'invalid_key') {
+        fallbackMessage = 'API key is invalid. Please check your Gemini API key.';
+      } else if (lastReason === 'permission_denied') {
+        fallbackMessage = 'API key permission denied. Please verify API access in Google Cloud Console.';
+      }
+
       return res.json({
         text: '',
         success: false,
         reason: lastReason,
-        message: 'Gemini rate-limited or unavailable; falling back to local solver.',
+        message: fallbackMessage,
       });
     } catch {
       return res.json({
